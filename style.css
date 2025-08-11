@@ -33,3 +33,13 @@ body {
 .edit-field {
     display: none;
 }
+
+/* สไตล์สำหรับแถวที่ถูกเลือกในหน้าส่งยอด */
+.row-selected {
+    background-color: #eff6ff; /* Tailwind's blue-50 */
+}
+
+/* กำหนดความสูงขั้นต่ำให้พื้นที่เนื้อหาหลัก */
+.main-content-area {
+    min-height: 60vh; /* 60% ของความสูงหน้าจอ */
+}

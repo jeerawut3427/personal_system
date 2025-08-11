@@ -54,6 +54,7 @@ window.personnelSearchBtn = null;
 window.userSearchInput = null;
 window.userSearchBtn = null;
 window.exportMonthlySummaryBtn = null;
+window.historyContainer = null;
 
 // --- Main Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -120,6 +121,7 @@ function assignDomElements() {
     window.userSearchInput = document.getElementById('user-search-input');
     window.userSearchBtn = document.getElementById('user-search-btn');
     window.exportMonthlySummaryBtn = document.getElementById('export-monthly-summary-btn');
+    window.historyContainer = document.getElementById('history-container');
 }
 
 function initializePage() {
@@ -208,6 +210,7 @@ function initializePage() {
         });
     }
     if(exportMonthlySummaryBtn) exportMonthlySummaryBtn.addEventListener('click', handlers.handleExportMonthlySummary);
+    if(historyContainer) historyContainer.addEventListener('click', handlers.handleHistoryEditClick);
 }
 
 // --- Data Loading and Tab Switching ---
@@ -217,7 +220,9 @@ window.loadDataForPane = async function(paneId) {
         'pane-dashboard': { action: 'get_dashboard_summary', renderer: ui.renderDashboard, key: 'summary' },
         'pane-personnel': { action: 'list_personnel', renderer: ui.renderPersonnel, key: 'personnel', searchInput: personnelSearchInput },
         'pane-admin': { action: 'list_users', renderer: ui.renderUsers, key: 'users', searchInput: userSearchInput },
+        // --- START: การเปลี่ยนแปลง ---
         'pane-submit-status': { action: 'list_personnel', renderer: ui.renderStatusSubmissionForm, key: 'personnel' },
+        // --- END: การเปลี่ยนแปลง ---
         'pane-history': { action: 'get_submission_history', renderer: ui.renderSubmissionHistory, key: 'history' },
         'pane-report': { action: 'get_status_reports', renderer: ui.renderWeeklyReport, key: 'reports' },
         'pane-archive': { action: 'get_archived_reports', renderer: (data) => {
@@ -239,7 +244,10 @@ window.loadDataForPane = async function(paneId) {
         if (res && res.status === 'success') {
             const dataToRender = res[paneConfig.key];
             if (dataToRender !== undefined) {
-                paneConfig.renderer(dataToRender);
+                // --- START: การเปลี่ยนแปลง ---
+                // ส่ง response object ทั้งหมดไปให้ renderer
+                paneConfig.renderer(dataToRender, res);
+                // --- END: การเปลี่ยนแปลง ---
             } else {
                 ui.showMessage(`เกิดข้อผิดพลาด: ไม่พบข้อมูล '${paneConfig.key}'`, false);
             }

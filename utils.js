@@ -30,11 +30,49 @@ export function escapeHTML(str) {
 export function formatThaiDate(isoDate) {
     if (!isoDate) return '';
     const date = new Date(isoDate);
+    const thaiMonthsAbbr = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
     const year = date.getFullYear() + 543;
-    const month = date.toLocaleString('th-TH', { month: 'long' });
+    const month = thaiMonthsAbbr[date.getMonth()];
     const day = date.getDate();
-    return `${day} ${month} ${year}`;
+    return `${day} ${month}${String(year).slice(-2)}`;
 }
+
+// --- START: ฟังก์ชันใหม่สำหรับจัดรูปแบบช่วงวันที่ ---
+export function formatThaiDateRange(startDateIso, endDateIso) {
+    if (!startDateIso || !endDateIso) return 'N/A';
+    
+    const thaiMonthsAbbr = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const startDate = new Date(startDateIso);
+    const endDate = new Date(endDateIso);
+
+    // กรณีวันเดียวกัน
+    if (startDate.getTime() === endDate.getTime()) {
+        return formatThaiDate(startDateIso);
+    }
+
+    const startDay = startDate.getDate();
+    const startMonthAbbr = thaiMonthsAbbr[startDate.getMonth()];
+    const startYearBE = startDate.getFullYear() + 543;
+
+    const endDay = endDate.getDate();
+    const endMonthAbbr = thaiMonthsAbbr[endDate.getMonth()];
+    const endYearBE = endDate.getFullYear() + 543;
+
+    // Case 3: ข้ามปี
+    if (startYearBE !== endYearBE) {
+        return `${startDay} ${startMonthAbbr}${String(startYearBE).slice(-2)} - ${endDay} ${endMonthAbbr}${String(endYearBE).slice(-2)}`;
+    }
+
+    // Case 2: ข้ามเดือน (แต่ปีเดียวกัน)
+    if (startDate.getMonth() !== endDate.getMonth()) {
+        return `${startDay} ${startMonthAbbr}- ${endDay} ${endMonthAbbr}${String(endYearBE).slice(-2)}`;
+    }
+
+    // Case 1: เดือนเดียวกัน ปีเดียวกัน
+    return `${startDay}-${endDay} ${startMonthAbbr}${String(endYearBE).slice(-2)}`;
+}
+// --- END: ฟังก์ชันใหม่ ---
+
 
 export function exportSingleReportToExcel(reports, fileName) {
     const dataForExport = [];
@@ -56,9 +94,7 @@ export function exportSingleReportToExcel(reports, fileName) {
             'ยศ-คำนำหน้า': rank,
             'สถานะ': item.status,
             'รายละเอียด': item.details,
-            'ช่วงวันที่': item.start_date === item.end_date 
-                        ? formatThaiDate(item.start_date) 
-                        : `${formatThaiDate(item.start_date)} - ${formatThaiDate(item.end_date)}`
+            'ช่วงวันที่': formatThaiDateRange(item.start_date, item.end_date)
         });
     });
 

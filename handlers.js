@@ -3,7 +3,7 @@
 
 import { sendRequest } from './api.js';
 import { showMessage, openPersonnelModal, openUserModal, renderArchivedReports } from './ui.js';
-import { exportSingleReportToExcel, formatThaiDate, escapeHTML } from './utils.js';
+import { exportSingleReportToExcel, formatThaiDate, formatThaiDateRange, escapeHTML } from './utils.js';
 
 // การแก้ไข: ทุกฟังก์ชันจะเข้าถึงตัวแปรกลางและ DOM ผ่าน window object
 
@@ -161,26 +161,35 @@ export function handleReviewStatus() {
     });
 
     if (hasError) return;
+
     if (reviewItems.length === 0) {
-        showMessage('ไม่พบรายการที่จะส่งยอด (กรุณาเลือกสถานะที่ไม่ใช่ "ไม่มี")', false);
-        return;
+        window.reviewListArea.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-500">ยืนยันการส่งยอด: กำลังพลมาปฏิบัติงานครบถ้วน</td></tr>`;
+    } else {
+        window.reviewListArea.innerHTML = reviewItems.map(item => {
+            const dateRange = formatThaiDateRange(item.start_date, item.end_date);
+            return `<tr>
+                        <td class="border-t px-4 py-2">${escapeHTML(item.personnel_name)}</td>
+                        <td class="border-t px-4 py-2">${escapeHTML(item.status)}</td>
+                        <td class="border-t px-4 py-2">${escapeHTML(item.details) || '-'}</td>
+                        <td class="border-t px-4 py-2">${dateRange}</td>
+                    </tr>`;
+        }).join('');
     }
-    
-    window.reviewListArea.innerHTML = reviewItems.map(item => {
-        const dateRange = item.start_date === item.end_date ? formatThaiDate(item.start_date) : `${formatThaiDate(item.start_date)} - ${formatThaiDate(item.end_date)}`;
-        return `<tr>
-                    <td class="border-t px-4 py-2">${escapeHTML(item.personnel_name)}</td>
-                    <td class="border-t px-4 py-2">${escapeHTML(item.status)}</td>
-                    <td class="border-t px-4 py-2">${escapeHTML(item.details) || '-'}</td>
-                    <td class="border-t px-4 py-2">${dateRange}</td>
-                </tr>`;
-    }).join('');
 
     window.submissionFormSection.classList.add('hidden');
     window.reviewReportSection.classList.remove('hidden');
 }
 
+
 export async function handleSubmitStatusReport() {
+    // --- START: การเปลี่ยนแปลง ---
+    const confirmBtn = document.getElementById('confirm-submit-btn');
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'กำลังส่ง...';
+    }
+    // --- END: การเปลี่ยนแปลง ---
+
     const rows = window.statusSubmissionListArea.querySelectorAll('tr');
     const reportItems = [];
     
@@ -196,7 +205,20 @@ export async function handleSubmitStatusReport() {
         }
     });
 
-    const report = { date: new Date().toISOString().split('T')[0], items: reportItems };
+    let reportDepartment = window.currentUser.department;
+    if (window.currentUser.role === 'admin') {
+        const deptSelector = document.getElementById('admin-dept-selector');
+        if (deptSelector) {
+            reportDepartment = deptSelector.value;
+        }
+    }
+
+    const report = {
+        date: new Date().toISOString().split('T')[0],
+        items: reportItems,
+        department: reportDepartment
+    };
+
     try {
         const response = await sendRequest('submit_status_report', { report });
         showMessage(response.message, response.status === 'success');
@@ -206,6 +228,13 @@ export async function handleSubmitStatusReport() {
         }
     } catch(error) {
         showMessage(error.message, false);
+        // --- START: การเปลี่ยนแปลง ---
+        // เปิดปุ่มให้ใช้งานอีกครั้งหากเกิดข้อผิดพลาด
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'ยืนยันและส่งยอด';
+        }
+        // --- END: การเปลี่ยนแปลง ---
     }
 }
 
@@ -271,4 +300,24 @@ export function handleExportMonthlySummary() {
     const monthName = window.archiveMonthSelect.options[window.archiveMonthSelect.selectedIndex].text;
     const yearBE = window.archiveYearSelect.options[window.archiveYearSelect.selectedIndex].text;
     exportSingleReportToExcel(reportsForMonth, `รายงานสรุปเดือน${monthName}${yearBE}.xlsx`);
+}
+
+export async function handleHistoryEditClick(e) {
+    const target = e.target;
+    if (!target.classList.contains('edit-history-btn')) return;
+
+    const reportId = target.dataset.id;
+    if (!reportId) return;
+
+    try {
+        const res = await sendRequest('get_report_for_editing', { id: reportId });
+        if (res.status === 'success' && res.report) {
+            window.editingReportData = res.report;
+            window.switchTab('tab-submit-status');
+        } else {
+            showMessage(res.message || 'ไม่สามารถดึงข้อมูลมาแก้ไขได้', false);
+        }
+    } catch (error) {
+        showMessage(error.message, false);
+    }
 }
