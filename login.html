@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เข้าสู่ระบบ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Navy gradient and White card theme */
+        .navy-gradient-bg {
+            background-image: linear-gradient(to bottom right, #1a237e, #3f51b5);
+        }
+        .white-card {
+            background-color: #ffffff;
+        }
+    </style>
+</head>
+<body class="navy-gradient-bg flex items-center justify-center min-h-screen p-4">
+    <div class="w-full max-w-md">
+        <div id="message-area" class="mb-4 text-center"></div>
+        <div class="white-card p-8 rounded-xl shadow-lg max-w-md mx-auto border border-white border-opacity-30">
+             <h1 class="text-3xl font-bold mb-2 text-center text-gray-800">ระบบจัดการกำลังพล</h1>
+             <h2 class="text-xl mb-6 text-center text-gray-600">น.สัญญาบัตร กวก.ชย.ทอ.</h2>
+            <form id="login-form">
+                <div class="mb-4">
+                    <label for="login-username" class="block text-gray-700 text-sm font-bold mb-2">ชื่อผู้ใช้</label>
+                    <input type="text" 
+                           id="login-username" 
+                           class="shadow appearance-none rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-400" 
+                           pattern="[a-z]+" 
+                           title="กรุณากรอกภาษาอังกฤษตัวพิมพ์เล็กเท่านั้น" 
+                           oninput="this.value = this.value.toLowerCase().replace(/[^a-z]/g, '')" 
+                           required>
+                    <p class="text-xs text-gray-500 mt-1">กรอกได้เฉพาะภาษาอังกฤษตัวพิมพ์เล็กเท่านั้น</p>
+                </div>
+                <div class="mb-6">
+                    <label for="login-password" class="block text-gray-700 text-sm font-bold mb-2">รหัสผ่าน</label>
+                    <input type="password" 
+                           id="login-password" 
+                           class="shadow appearance-none rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-400" 
+                           required>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg">เข้าสู่ระบบ</button>
+            </form>
+        </div>
+    </div>
+    <script src="login.js" defer></script>
+</body>
+</html>
