@@ -3,9 +3,9 @@
 
 import { sendRequest } from './api.js';
 import { showMessage, openPersonnelModal, openUserModal, renderArchivedReports } from './ui.js';
-import { exportSingleReportToExcel, formatThaiDate, formatThaiDateRange, escapeHTML } from './utils.js';
+import { exportSingleReportToExcel, formatThaiDateArabic, formatThaiDateRangeArabic } from './utils.js';
 
-// การแก้ไข: ทุกฟังก์ชันจะเข้าถึงตัวแปรกลางและ DOM ผ่าน window object
+// All functions access global variables and DOM via the window object
 
 export async function handlePersonnelFormSubmit(e) {
     e.preventDefault();
@@ -24,7 +24,7 @@ export async function handlePersonnelFormSubmit(e) {
         const response = await sendRequest(action, { data });
         if (response.status === 'success') {
             window.personnelModal.classList.remove('active');
-            window.loadDataForPane('pane-personnel');
+            window.loadDataForPane('pane-personnel'); // Reload data to reflect changes
         }
         showMessage(response.message, response.status === 'success');
     } catch (error) {
@@ -45,10 +45,11 @@ export async function handlePersonnelListClick(e) {
                 showMessage(response.message, response.status === 'success');
             }
         } else if (target.classList.contains('edit-person-btn')) {
-             const res = await sendRequest('list_personnel', {});
-             if (res.status === 'success') {
-                const personToEdit = res.personnel.find(p => p.id === personId);
-                if (personToEdit) openPersonnelModal(personToEdit);
+             const res = await sendRequest('get_personnel_details', { id: personId });
+             if (res.status === 'success' && res.personnel) {
+                openPersonnelModal(res.personnel);
+             } else {
+                showMessage(res.message || 'ไม่พบข้อมูลกำลังพลที่ต้องการแก้ไข', false);
              }
         }
     } catch(error) {
@@ -97,10 +98,11 @@ export async function handleUserListClick(e) {
                 showMessage(response.message, response.status === 'success');
             }
         } else if (target.classList.contains('edit-user-btn')) {
-            const res = await sendRequest('list_users', {});
+            const res = await sendRequest('list_users', { page: 1, searchTerm: '' }); // Fetch all for editing
             if (res.status === 'success') {
                 const userToEdit = res.users.find(u => u.username === username);
                 if (userToEdit) openUserModal(userToEdit);
+                else showMessage('ไม่พบข้อมูลผู้ใช้ที่ต้องการแก้ไข', false);
             }
         }
     } catch(error) {
@@ -143,9 +145,16 @@ export function handleReviewStatus() {
     const reviewItems = [];
     let hasError = false;
 
+    if (rows.length === 0 || !rows[0].querySelector('.status-select')) {
+        window.reviewListArea.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-500">ยืนยันการส่งยอด: กำลังพลมาปฏิบัติงานครบถ้วน</td></tr>`;
+        window.submissionFormSection.classList.add('hidden');
+        window.reviewReportSection.classList.remove('hidden');
+        return;
+    }
+
     rows.forEach(row => {
-        const status = row.querySelector('.status-select').value;
-        if (status !== 'ไม่มี') {
+        const statusSelect = row.querySelector('.status-select');
+        if (statusSelect && statusSelect.value !== 'ไม่มี') {
             const startDate = row.querySelector('.start-date-input').value;
             const endDate = row.querySelector('.end-date-input').value;
             if (!startDate || !endDate) {
@@ -153,7 +162,7 @@ export function handleReviewStatus() {
                 hasError = true; return;
             }
             reviewItems.push({
-                personnel_name: row.dataset.personnelName, status: status,
+                personnel_name: row.dataset.personnelName, status: statusSelect.value,
                 details: row.querySelector('.details-input').value,
                 start_date: startDate, end_date: endDate
             });
@@ -166,7 +175,7 @@ export function handleReviewStatus() {
         window.reviewListArea.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-500">ยืนยันการส่งยอด: กำลังพลมาปฏิบัติงานครบถ้วน</td></tr>`;
     } else {
         window.reviewListArea.innerHTML = reviewItems.map(item => {
-            const dateRange = formatThaiDateRange(item.start_date, item.end_date);
+            const dateRange = formatThaiDateRangeArabic(item.start_date, item.end_date);
             return `<tr>
                         <td class="border-t px-4 py-2">${escapeHTML(item.personnel_name)}</td>
                         <td class="border-t px-4 py-2">${escapeHTML(item.status)}</td>
@@ -180,25 +189,22 @@ export function handleReviewStatus() {
     window.reviewReportSection.classList.remove('hidden');
 }
 
-
 export async function handleSubmitStatusReport() {
-    // --- START: การเปลี่ยนแปลง ---
     const confirmBtn = document.getElementById('confirm-submit-btn');
     if (confirmBtn) {
         confirmBtn.disabled = true;
         confirmBtn.textContent = 'กำลังส่ง...';
     }
-    // --- END: การเปลี่ยนแปลง ---
 
     const rows = window.statusSubmissionListArea.querySelectorAll('tr');
     const reportItems = [];
     
     rows.forEach(row => {
-        const status = row.querySelector('.status-select').value;
-        if (status !== 'ไม่มี') {
+        const statusSelect = row.querySelector('.status-select');
+        if (statusSelect && statusSelect.value !== 'ไม่มี') {
             reportItems.push({
                 personnel_id: row.dataset.personnelId, personnel_name: row.dataset.personnelName,
-                status: status, details: row.querySelector('.details-input').value,
+                status: statusSelect.value, details: row.querySelector('.details-input').value,
                 start_date: row.querySelector('.start-date-input').value,
                 end_date: row.querySelector('.end-date-input').value
             });
@@ -223,28 +229,36 @@ export async function handleSubmitStatusReport() {
         const response = await sendRequest('submit_status_report', { report });
         showMessage(response.message, response.status === 'success');
         if (response.status === 'success') {
-            window.reviewReportSection.classList.add('hidden');
-            window.loadDataForPane('pane-submit-status');
+            reviewReportSection.classList.add('hidden');
+            if (window.currentUser.role === 'admin') {
+                window.switchTab('tab-dashboard');
+            } else {
+                window.loadDataForPane('pane-submit-status');
+            }
         }
     } catch(error) {
         showMessage(error.message, false);
-        // --- START: การเปลี่ยนแปลง ---
-        // เปิดปุ่มให้ใช้งานอีกครั้งหากเกิดข้อผิดพลาด
+    } finally {
         if (confirmBtn) {
             confirmBtn.disabled = false;
             confirmBtn.textContent = 'ยืนยันและส่งยอด';
         }
-        // --- END: การเปลี่ยนแปลง ---
     }
 }
 
-export async function handleExportAndArchive() {
+export async function handleExportAndArchive(weekRangeText) {
+    const fileNameInput = document.getElementById('export-filename-input');
+    let fileName = fileNameInput.value.trim();
+    if (!fileName.toLowerCase().endsWith('.xlsx')) {
+        fileName += '.xlsx';
+    }
+
     window.archiveConfirmModal.classList.remove('active');
     if (!window.currentWeeklyReports || window.currentWeeklyReports.length === 0) {
         showMessage('ไม่มีข้อมูลรายงานที่จะส่งออก', false);
         return;
     }
-    exportSingleReportToExcel(window.currentWeeklyReports, `รายงานกำลังพล-${new Date().toISOString().split('T')[0]}.xlsx`);
+    exportSingleReportToExcel(window.currentWeeklyReports, fileName, weekRangeText);
     try {
         const response = await sendRequest('archive_reports', { reports: window.currentWeeklyReports });
         showMessage(response.message, response.status === 'success');
@@ -263,7 +277,7 @@ export function handleShowArchive() {
         showMessage('กรุณาเลือกปีและเดือน', false);
         return;
     }
-    const reportsForMonth = window.allArchivedReports[year][month];
+    const reportsForMonth = window.allArchivedReports[year] ? window.allArchivedReports[year][month] : [];
     renderArchivedReports(reportsForMonth);
 }
 
@@ -272,34 +286,26 @@ export function handleArchiveDownloadClick(e) {
         const date = e.target.dataset.date;
         const year = window.archiveYearSelect.value;
         const month = window.archiveMonthSelect.value;
-        if (!year || !month || !date) return;
+        if (!year || !month || !date) {
+            showMessage('กรุณาเลือกปีและเดือนก่อนดาวน์โหลด', false);
+            return;
+        }
 
-        const reportsForMonth = window.allArchivedReports[year][month];
+        const reportsForMonth = window.allArchivedReports[year] ? window.allArchivedReports[year][month] : [];
+        
+        if (!reportsForMonth || !Array.isArray(reportsForMonth)) {
+            showMessage('เกิดข้อผิดพลาด: ไม่พบข้อมูลสำหรับเดือนที่เลือก', false);
+            return;
+        }
+
         const reportsToDownload = reportsForMonth.filter(r => r.date === date);
         
         if (reportsToDownload.length > 0) {
             exportSingleReportToExcel(reportsToDownload, `รายงานย้อนหลัง-${date}.xlsx`);
         } else {
-            showMessage('ไม่พบข้อมูลรายงานที่จะดาวน์โหลด', false);
+            showMessage('ไม่พบข้อมูลรายงานที่จะดาวน์โหลดสำหรับวันนี้', false);
         }
     }
-}
-
-export function handleExportMonthlySummary() {
-    const year = window.archiveYearSelect.value;
-    const month = window.archiveMonthSelect.value;
-    if (!year || !month) {
-        showMessage('กรุณาเลือกปีและเดือนก่อนส่งออก', false);
-        return;
-    }
-    const reportsForMonth = window.allArchivedReports[year][month];
-    if (!reportsForMonth || reportsForMonth.length === 0) {
-        showMessage('ไม่พบข้อมูลที่จะส่งออกสำหรับเดือนที่เลือก', false);
-        return;
-    }
-    const monthName = window.archiveMonthSelect.options[window.archiveMonthSelect.selectedIndex].text;
-    const yearBE = window.archiveYearSelect.options[window.archiveYearSelect.selectedIndex].text;
-    exportSingleReportToExcel(reportsForMonth, `รายงานสรุปเดือน${monthName}${yearBE}.xlsx`);
 }
 
 export async function handleHistoryEditClick(e) {

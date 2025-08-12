@@ -4,17 +4,18 @@
 // --- Helper Functions ---
 
 function toThaiNumerals(n) {
+    if (n === null || n === undefined) return '';
     const thaiDigits = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'];
     return n.toString().replace(/[0-9]/g, d => thaiDigits[parseInt(d)]);
 }
 
 function getThaiHeaderDate(date) {
-    const thaiMonthsAbbr = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
     const d = new Date(date);
-    const day = toThaiNumerals(d.getDate());
-    const month = thaiMonthsAbbr[d.getMonth()];
-    const year = toThaiNumerals((d.getFullYear() + 543).toString().slice(-2));
-    return `${day} ${month} ${year}`;
+    const day = d.getDate();
+    const month = thaiMonths[d.getMonth()];
+    const year = d.getFullYear() + 543;
+    return `${toThaiNumerals(day)} ${month} ${toThaiNumerals(year)}`;
 }
 
 export function escapeHTML(str) {
@@ -27,7 +28,9 @@ export function escapeHTML(str) {
         .replace(/'/g, '&#039;');
 }
 
-export function formatThaiDate(isoDate) {
+// --- Arabic Numeral Formatters (for UI Display) ---
+
+export function formatThaiDateArabic(isoDate) {
     if (!isoDate) return '';
     const date = new Date(isoDate);
     const thaiMonthsAbbr = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -37,17 +40,15 @@ export function formatThaiDate(isoDate) {
     return `${day} ${month}${String(year).slice(-2)}`;
 }
 
-// --- START: ฟังก์ชันใหม่สำหรับจัดรูปแบบช่วงวันที่ ---
-export function formatThaiDateRange(startDateIso, endDateIso) {
+export function formatThaiDateRangeArabic(startDateIso, endDateIso) {
     if (!startDateIso || !endDateIso) return 'N/A';
     
     const thaiMonthsAbbr = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
     const startDate = new Date(startDateIso);
     const endDate = new Date(endDateIso);
 
-    // กรณีวันเดียวกัน
     if (startDate.getTime() === endDate.getTime()) {
-        return formatThaiDate(startDateIso);
+        return formatThaiDateArabic(startDateIso);
     }
 
     const startDay = startDate.getDate();
@@ -58,73 +59,142 @@ export function formatThaiDateRange(startDateIso, endDateIso) {
     const endMonthAbbr = thaiMonthsAbbr[endDate.getMonth()];
     const endYearBE = endDate.getFullYear() + 543;
 
-    // Case 3: ข้ามปี
     if (startYearBE !== endYearBE) {
         return `${startDay} ${startMonthAbbr}${String(startYearBE).slice(-2)} - ${endDay} ${endMonthAbbr}${String(endYearBE).slice(-2)}`;
     }
 
-    // Case 2: ข้ามเดือน (แต่ปีเดียวกัน)
     if (startDate.getMonth() !== endDate.getMonth()) {
-        return `${startDay} ${startMonthAbbr}- ${endDay} ${endMonthAbbr}${String(endYearBE).slice(-2)}`;
+        return `${startDay} ${startMonthAbbr} - ${endDay} ${endMonthAbbr}${String(endYearBE).slice(-2)}`;
     }
 
-    // Case 1: เดือนเดียวกัน ปีเดียวกัน
-    return `${startDay}-${endDay} ${startMonthAbbr}${String(endYearBE).slice(-2)}`;
+    return `${startDay} - ${endDay} ${startMonthAbbr}${String(endYearBE).slice(-2)}`;
 }
-// --- END: ฟังก์ชันใหม่ ---
 
 
-export function exportSingleReportToExcel(reports, fileName) {
+// --- Thai Numeral Formatters (for Excel Export) ---
+
+function formatThaiDateThai(isoDate) {
+    if (!isoDate) return '';
+    const date = new Date(isoDate);
+    const thaiMonthsAbbr = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const year = date.getFullYear() + 543;
+    const month = thaiMonthsAbbr[date.getMonth()];
+    const day = date.getDate();
+    return `${toThaiNumerals(day)} ${month}${toThaiNumerals(String(year).slice(-2))}`;
+}
+
+function formatThaiDateRangeThai(startDateIso, endDateIso) {
+    if (!startDateIso || !endDateIso) return 'N/A';
+    
+    const thaiMonthsAbbr = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const startDate = new Date(startDateIso);
+    const endDate = new Date(endDateIso);
+
+    if (startDate.getTime() === endDate.getTime()) {
+        return formatThaiDateThai(startDateIso);
+    }
+
+    const startDay = startDate.getDate();
+    const startMonthAbbr = thaiMonthsAbbr[startDate.getMonth()];
+    const startYearBE = startDate.getFullYear() + 543;
+
+    const endDay = endDate.getDate();
+    const endMonthAbbr = thaiMonthsAbbr[endDate.getMonth()];
+    const endYearBE = endDate.getFullYear() + 543;
+
+    if (startYearBE !== endYearBE) {
+        return `${toThaiNumerals(startDay)} ${startMonthAbbr}${toThaiNumerals(String(startYearBE).slice(-2))} - ${toThaiNumerals(endDay)} ${endMonthAbbr}${toThaiNumerals(String(endYearBE).slice(-2))}`;
+    }
+
+    if (startDate.getMonth() !== endDate.getMonth()) {
+        return `${toThaiNumerals(startDay)} ${startMonthAbbr} - ${toThaiNumerals(endDay)} ${endMonthAbbr}${toThaiNumerals(String(endYearBE).slice(-2))}`;
+    }
+
+    return `${toThaiNumerals(startDay)} - ${toThaiNumerals(endDay)} ${startMonthAbbr}${toThaiNumerals(String(endYearBE).slice(-2))}`;
+}
+
+
+export function exportSingleReportToExcel(reports, fileName, weekRangeText) {
     const dataForExport = [];
     let allItems = [];
     reports.forEach(report => {
         allItems = allItems.concat(report.items);
     });
 
-    let seq = 1;
-    allItems.forEach(item => {
+    allItems.forEach((item, index) => {
         const nameParts = item.personnel_name.split(' ');
         const rank = nameParts.length > 0 ? nameParts[0] : '';
         const firstName = nameParts.length > 1 ? nameParts[1] : '';
         const lastName = nameParts.length > 2 ? nameParts.slice(2).join(' ') : '';
         
+        const fullName = `${firstName}  ${lastName}`;
+        const dateRange = formatThaiDateRangeThai(item.start_date, item.end_date);
+        
+        let combinedDetails = item.status;
+        if (item.details) {
+            combinedDetails += ` ${toThaiNumerals(item.details)}`; // Convert numbers in details to Thai numerals
+        }
+        combinedDetails += ` (${dateRange})`;
+
         dataForExport.push({
-            'ลำดับ': toThaiNumerals(seq++),
-            'ชื่อและนามสกุล': `${firstName}  ${lastName}`,
-            'ยศ-คำนำหน้า': rank,
-            'สถานะ': item.status,
-            'รายละเอียด': item.details,
-            'ช่วงวันที่': formatThaiDateRange(item.start_date, item.end_date)
+            'ลำดับ': toThaiNumerals(index + 1),
+            'ชื่อ': fullName,
+            'ยศ': rank,
+            'สภาพการณ์หรือการเปลี่ยนแปลง': combinedDetails,
+            'หมายเหตุ': ''
         });
     });
 
-    const allDates = reports.map(r => new Date(r.date));
-    const minDate = new Date(Math.min.apply(null, allDates));
-    const maxDate = new Date(Math.max.apply(null, allDates));
-    const dateRangeString = `ระหว่างวันที่ ${getThaiHeaderDate(minDate)} - ${getThaiHeaderDate(maxDate)}`;
-
-    const header1 = ["บัญชีรายชื่อ น.สัญญาบัตรที่ไปราชการ, คุมงาน, ศึกษา, ลากิจ และลาพักผ่อน ประจำสัปดาห์ของ กวก.ชย.ทอ."];
-    const header2 = [dateRangeString];
-    
-    const ws = XLSX.utils.aoa_to_sheet([header1]);
-    XLSX.utils.sheet_add_aoa(ws, [header2], { origin: 'A2' });
-    
-    if (!ws['!merges']) ws['!merges'] = [];
-    ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }); 
-    ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 5 } });
-
-    const orderedData = dataForExport.map(row => ({
-        'ลำดับ': row['ลำดับ'],
-        'ชื่อและนามสกุล': row['ชื่อและนามสกุล'],
-        'ยศ-คำนำหน้า': row['ยศ-คำนำหน้า'],
-        'สถานะ': row['สถานะ'],
-        'รายละเอียด': row['รายละเอียด'],
-        'ช่วงวันที่': row['ช่วงวันที่']
-    }));
-
-    XLSX.utils.sheet_add_json(ws, orderedData, { origin: 'A3', skipHeader: false });
+    let dateRangeString;
+    if (weekRangeText) {
+        dateRangeString = `ระหว่างวันที่ ${weekRangeText.replace(/[()]/g, '').trim()}`;
+    } else {
+        const allDates = reports.map(r => new Date(r.date));
+        if (allDates.length > 0) {
+            const minDate = new Date(Math.min.apply(null, allDates));
+            const maxDate = new Date(Math.max.apply(null, allDates));
+            if (minDate.getTime() === maxDate.getTime()) {
+                dateRangeString = `ประจำวันที่ ${getThaiHeaderDate(minDate)}`;
+            } else {
+                dateRangeString = `ระหว่างวันที่ ${getThaiHeaderDate(minDate)} ถึง ${getThaiHeaderDate(maxDate)}`;
+            }
+        } else {
+            dateRangeString = "ไม่ระบุช่วงวันที่";
+        }
+    }
 
     const wb = XLSX.utils.book_new();
+    const ws_data = [
+        ["บัญชีรายชื่อ น.สัญญาบัตรที่ไปราชการ, คุมงาน, ศึกษา, ลากิจ และลาพักผ่อน ประจำสัปดาห์ของ กวก.ชย.ทอ."],
+        [dateRangeString],
+        ["ลำดับ", "ชื่อ", "ยศ", "สภาพการณ์หรือการเปลี่ยนแปลง", "หมายเหตุ"]
+    ];
+
+    dataForExport.forEach(row => {
+        ws_data.push([
+            row['ลำดับ'],
+            row['ชื่อ'],
+            row['ยศ'],
+            row['สภาพการณ์หรือการเปลี่ยนแปลง'],
+            row['หมายเหตุ']
+        ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(ws_data);
+
+    ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }, // A1-E1
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } }  // A2-E2
+    ];
+
+    ws['!cols'] = [
+        { wch: 10 }, // ลำดับ
+        { wch: 40 }, // ชื่อ
+        { wch: 20 }, // ยศ
+        { wch: 60 }, // สภาพการณ์หรือการเปลี่ยนแปลง
+        { wch: 20 }  // หมายเหตุ
+    ];
+
     XLSX.utils.book_append_sheet(wb, ws, "รายงาน");
     XLSX.writeFile(wb, fileName || "รายงาน.xlsx");
 }

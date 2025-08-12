@@ -8,9 +8,32 @@ import { escapeHTML } from './utils.js';
 
 // --- Global State and DOM References ---
 window.currentUser = null;
-window.sessionToken = null;
 window.currentWeeklyReports = [];
 window.allArchivedReports = {};
+window.personnelCurrentPage = 1;
+window.userCurrentPage = 1;
+
+// --- Auto Logout Feature ---
+let inactivityTimer;
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+function performLogout() {
+    clearTimeout(inactivityTimer);
+    sendRequest('logout', {}).finally(() => {
+        localStorage.removeItem('currentUser');
+        window.location.href = '/login.html';
+    });
+}
+
+function autoLogoutUser() {
+    alert("คุณไม่มีการใช้งานเป็นเวลานาน ระบบจะทำการออกจากระบบเพื่อความปลอดภัย");
+    performLogout();
+}
+
+function resetInactivityTimer() {
+    clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(autoLogoutUser, INACTIVITY_TIMEOUT_MS);
+}
 
 // DOM Elements
 window.appContainer = null;
@@ -53,7 +76,6 @@ window.personnelSearchInput = null;
 window.personnelSearchBtn = null;
 window.userSearchInput = null;
 window.userSearchBtn = null;
-window.exportMonthlySummaryBtn = null;
 window.historyContainer = null;
 
 // --- Main Initialization ---
@@ -62,15 +84,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     try {
         window.currentUser = JSON.parse(localStorage.getItem('currentUser'));
-        window.sessionToken = localStorage.getItem('sessionToken');
     } catch (e) {
         window.currentUser = null;
-        window.sessionToken = null;
     }
 
-    if (!window.currentUser || !window.sessionToken) {
+    if (!window.currentUser) {
         localStorage.removeItem('currentUser');
-        localStorage.removeItem('sessionToken');
         window.location.href = '/login.html';
         return;
     }
@@ -120,7 +139,6 @@ function assignDomElements() {
     window.personnelSearchBtn = document.getElementById('personnel-search-btn');
     window.userSearchInput = document.getElementById('user-search-input');
     window.userSearchBtn = document.getElementById('user-search-btn');
-    window.exportMonthlySummaryBtn = document.getElementById('export-monthly-summary-btn');
     window.historyContainer = document.getElementById('history-container');
 }
 
@@ -144,18 +162,13 @@ function initializePage() {
         switchTab('tab-submit-status');
     }
 
-    logoutBtn.addEventListener('click', async () => {
-        try {
-            await sendRequest('logout', { token: sessionToken });
-        } catch (error) {
-            console.error("Logout failed:", error);
-        }
-        localStorage.removeItem('currentUser');
-        localStorage.removeItem('sessionToken');
-        window.location.href = '/login.html';
-    });
+    logoutBtn.addEventListener('click', () => performLogout());
 
-    // Event Listeners
+    window.addEventListener('mousemove', resetInactivityTimer);
+    window.addEventListener('keydown', resetInactivityTimer);
+    window.addEventListener('click', resetInactivityTimer);
+    resetInactivityTimer();
+
     tabs.forEach(tab => tab.addEventListener('click', () => switchTab(tab.id)));
     if(addPersonnelBtn) addPersonnelBtn.addEventListener('click', () => ui.openPersonnelModal());
     if(cancelPersonnelBtn) cancelPersonnelBtn.addEventListener('click', () => personnelModal.classList.remove('active'));
@@ -181,17 +194,28 @@ function initializePage() {
         archiveConfirmModal.classList.add('active');
     });
     if (cancelArchiveBtn) cancelArchiveBtn.addEventListener('click', () => archiveConfirmModal.classList.remove('active'));
-    if (confirmArchiveBtn) confirmArchiveBtn.addEventListener('click', handlers.handleExportAndArchive);
+    if (confirmArchiveBtn) confirmArchiveBtn.addEventListener('click', () => {
+        const weekRangeText = document.getElementById('report-week-range')?.textContent || '';
+        handlers.handleExportAndArchive(weekRangeText);
+    });
     if (showArchiveBtn) showArchiveBtn.addEventListener('click', handlers.handleShowArchive);
     if (archiveContainer) archiveContainer.addEventListener('click', handlers.handleArchiveDownloadClick);
     
     if (personnelSearchBtn) {
-        personnelSearchBtn.addEventListener('click', () => loadDataForPane('pane-personnel'));
-        personnelSearchInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') loadDataForPane('pane-personnel'); });
+        const searchPersonnel = () => {
+            window.personnelCurrentPage = 1;
+            loadDataForPane('pane-personnel');
+        };
+        personnelSearchBtn.addEventListener('click', searchPersonnel);
+        personnelSearchInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') searchPersonnel(); });
     }
     if (userSearchBtn) {
-        userSearchBtn.addEventListener('click', () => loadDataForPane('pane-admin'));
-        userSearchInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') loadDataForPane('pane-admin'); });
+        const searchUser = () => {
+            window.userCurrentPage = 1;
+            loadDataForPane('pane-admin');
+        };
+        userSearchBtn.addEventListener('click', searchUser);
+        userSearchInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') searchUser(); });
     }
     
     if (archiveYearSelect) {
@@ -209,47 +233,45 @@ function initializePage() {
             }
         });
     }
-    if(exportMonthlySummaryBtn) exportMonthlySummaryBtn.addEventListener('click', handlers.handleExportMonthlySummary);
     if(historyContainer) historyContainer.addEventListener('click', handlers.handleHistoryEditClick);
 }
 
 // --- Data Loading and Tab Switching ---
 window.loadDataForPane = async function(paneId) {
-    let searchTerm = '';
+    let payload = {};
     const actions = {
-        'pane-dashboard': { action: 'get_dashboard_summary', renderer: ui.renderDashboard, key: 'summary' },
-        'pane-personnel': { action: 'list_personnel', renderer: ui.renderPersonnel, key: 'personnel', searchInput: personnelSearchInput },
-        'pane-admin': { action: 'list_users', renderer: ui.renderUsers, key: 'users', searchInput: userSearchInput },
-        // --- START: การเปลี่ยนแปลง ---
-        'pane-submit-status': { action: 'list_personnel', renderer: ui.renderStatusSubmissionForm, key: 'personnel' },
-        // --- END: การเปลี่ยนแปลง ---
-        'pane-history': { action: 'get_submission_history', renderer: ui.renderSubmissionHistory, key: 'history' },
-        'pane-report': { action: 'get_status_reports', renderer: ui.renderWeeklyReport, key: 'reports' },
-        'pane-archive': { action: 'get_archived_reports', renderer: (data) => {
-            window.allArchivedReports = data || {};
-            ui.populateArchiveSelectors(allArchivedReports);
-            if(archiveContainer) archiveContainer.innerHTML = '';
-        }, key: 'archives' }
+        'pane-dashboard': { action: 'get_dashboard_summary', renderer: ui.renderDashboard },
+        'pane-personnel': { action: 'list_personnel', renderer: ui.renderPersonnel, searchInput: personnelSearchInput, pageState: 'personnelCurrentPage' },
+        'pane-admin': { action: 'list_users', renderer: ui.renderUsers, searchInput: userSearchInput, pageState: 'userCurrentPage' },
+        'pane-submit-status': { action: 'list_personnel', renderer: ui.renderStatusSubmissionForm, fetchAll: true },
+        'pane-history': { action: 'get_submission_history', renderer: ui.renderSubmissionHistory },
+        'pane-report': { action: 'get_status_reports', renderer: ui.renderWeeklyReport },
+        'pane-archive': { action: 'get_archived_reports', renderer: (res) => {
+            const archives = res.archives;
+            window.allArchivedReports = archives || {};
+            ui.populateArchiveSelectors(window.allArchivedReports);
+            if(window.archiveContainer) window.archiveContainer.innerHTML = '';
+        }}
     };
 
     const paneConfig = actions[paneId];
     if (!paneConfig) return;
 
     if (paneConfig.searchInput) {
-        searchTerm = paneConfig.searchInput.value;
+        payload.searchTerm = paneConfig.searchInput.value;
+    }
+    if (paneConfig.pageState) {
+        payload.page = window[paneConfig.pageState];
+    }
+    if (paneConfig.fetchAll) {
+        payload.fetchAll = true;
     }
 
     try {
-        const res = await sendRequest(paneConfig.action, { searchTerm });
+        const res = await sendRequest(paneConfig.action, payload);
         if (res && res.status === 'success') {
-            const dataToRender = res[paneConfig.key];
-            if (dataToRender !== undefined) {
-                // --- START: การเปลี่ยนแปลง ---
-                // ส่ง response object ทั้งหมดไปให้ renderer
-                paneConfig.renderer(dataToRender, res);
-                // --- END: การเปลี่ยนแปลง ---
-            } else {
-                ui.showMessage(`เกิดข้อผิดพลาด: ไม่พบข้อมูล '${paneConfig.key}'`, false);
+            if (paneConfig.renderer) {
+                paneConfig.renderer(res);
             }
         } else if (res && res.message) {
             ui.showMessage(res.message, false);
@@ -267,6 +289,8 @@ window.switchTab = function(tabId) {
         if (tab.id === tabId) {
             tab.classList.add('active');
             pane.classList.remove('hidden');
+            if (paneId === 'pane-personnel') window.personnelCurrentPage = 1;
+            if (paneId === 'pane-admin') window.userCurrentPage = 1;
             loadDataForPane(paneId);
         } else {
             tab.classList.remove('active');

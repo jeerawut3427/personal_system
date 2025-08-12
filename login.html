@@ -23,7 +23,7 @@
     <div class="w-full max-w-md">
         <div id="message-area" class="mb-4 text-center"></div>
         <div class="white-card p-8 rounded-xl shadow-lg max-w-md mx-auto border border-white border-opacity-30">
-             <h1 class="text-3xl font-bold mb-2 text-center text-gray-800">ระบบจัดการกำลังพล</h1>
+             <h1 class="text-3xl font-bold mb-2 text-center text-gray-800">ระบบรายงานยอดกำลังพลประจำสัปดาห์</h1>
              <h2 class="text-xl mb-6 text-center text-gray-600">น.สัญญาบัตร กวก.ชย.ทอ.</h2>
             <form id="login-form">
                 <div class="mb-4">
@@ -31,9 +31,6 @@
                     <input type="text" 
                            id="login-username" 
                            class="shadow appearance-none rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-400" 
-                           pattern="[a-z]+" 
-                           title="กรุณากรอกภาษาอังกฤษตัวพิมพ์เล็กเท่านั้น" 
-                           oninput="this.value = this.value.toLowerCase().replace(/[^a-z]/g, '')" 
                            required>
                     <p class="text-xs text-gray-500 mt-1">กรอกได้เฉพาะภาษาอังกฤษตัวพิมพ์เล็กเท่านั้น</p>
                 </div>
@@ -43,6 +40,7 @@
                            id="login-password" 
                            class="shadow appearance-none rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline focus:ring-2 focus:ring-blue-400" 
                            required>
+                    <p class="text-xs text-gray-500 mt-1">ต้องมีความยาวอย่างน้อย 8 ตัวอักษร และมีตัวพิมพ์เล็ก, พิมพ์ใหญ่, และตัวเลข</p>
                 </div>
                 <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg">เข้าสู่ระบบ</button>
             </form>

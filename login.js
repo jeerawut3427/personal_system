@@ -2,17 +2,38 @@ const API_URL = '/api';
 
 const loginForm = document.getElementById('login-form');
 const messageArea = document.getElementById('message-area');
+const usernameInput = document.getElementById('login-username');
+
+// --- START: Input Sanitization ---
+// Add an event listener to the username input field.
+usernameInput.addEventListener('input', () => {
+    // This regular expression removes any character that is NOT a lowercase English letter (a-z).
+    const sanitizedValue = usernameInput.value.toLowerCase().replace(/[^a-z]/g, '');
+    // Update the input field's value with the sanitized version in real-time.
+    usernameInput.value = sanitizedValue;
+});
+// --- END: Input Sanitization ---
 
 function showMessage(message, isSuccess = true) {
     messageArea.textContent = message;
     messageArea.className = `mb-4 text-center p-3 rounded-lg ${isSuccess ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
 }
 
+function isPasswordComplex(password) {
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+    return passwordRegex.test(password);
+}
+
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const submitButton = loginForm.querySelector('button[type="submit"]');
-    const username = loginForm.querySelector('#login-username').value;
+    const username = usernameInput.value; // Use the already sanitized value
     const password = loginForm.querySelector('#login-password').value;
+
+    if (!isPasswordComplex(password)) {
+        showMessage('รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร และประกอบด้วยตัวพิมพ์เล็ก, พิมพ์ใหญ่, และตัวเลข', false);
+        return;
+    }
 
     submitButton.disabled = true;
     submitButton.textContent = 'กำลังเข้าสู่ระบบ...';
@@ -26,17 +47,11 @@ loginForm.addEventListener('submit', async (e) => {
         
         const result = await response.json();
 
-        if (result.status === 'success' && result.user && result.token) {
-            // --- การเปลี่ยนแปลง ---
-            // 1. เก็บแค่ข้อมูล user ที่ไม่สำคัญและ token
-            // 2. ใช้ localStorage แทน sessionStorage เพื่อให้ token อยู่นานกว่า (แต่ยังไม่ปลอดภัยเท่า HttpOnly Cookie)
+        if (response.ok && result.status === 'success' && result.user) {
             localStorage.setItem('currentUser', JSON.stringify(result.user));
-            localStorage.setItem('sessionToken', result.token);
-            
             window.location.href = '/main.html';
         } else {
             showMessage(result.message || 'เกิดข้อผิดพลาดในการล็อกอิน', false);
-            // Re-enable button on failure
             submitButton.disabled = false;
             submitButton.textContent = 'เข้าสู่ระบบ';
         }

@@ -1,9 +1,39 @@
 // ui.js
 // Contains all functions related to updating and rendering the user interface.
 
-import { escapeHTML, formatThaiDate, formatThaiDateRange } from './utils.js';
+import { escapeHTML, formatThaiDateArabic, formatThaiDateRangeArabic } from './utils.js';
 
-// ทุกฟังก์ชันจะเข้าถึงตัวแปร DOM ผ่าน window object
+const ITEMS_PER_PAGE = 15;
+
+// --- Helper function to render pagination controls ---
+function renderPagination(containerId, totalItems, currentPage, onPageChange) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+    if (totalPages <= 1) return;
+
+    const prevButton = document.createElement('button');
+    prevButton.textContent = '‹ ก่อนหน้า';
+    prevButton.disabled = currentPage === 1;
+    prevButton.className = 'px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
+    prevButton.addEventListener('click', () => onPageChange(currentPage - 1));
+
+    const pageInfo = document.createElement('span');
+    pageInfo.textContent = `หน้า ${currentPage} จาก ${totalPages}`;
+    pageInfo.className = 'text-sm text-gray-600';
+
+    const nextButton = document.createElement('button');
+    nextButton.textContent = 'ถัดไป ›';
+    nextButton.disabled = currentPage === totalPages;
+    nextButton.className = 'px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
+    nextButton.addEventListener('click', () => onPageChange(currentPage + 1));
+
+    container.appendChild(prevButton);
+    container.appendChild(pageInfo);
+    container.appendChild(nextButton);
+}
 
 export function showMessage(message, isSuccess = true) {
     if (!window.messageArea) return;
@@ -38,7 +68,8 @@ export function populateRankDropdowns() {
     });
 }
 
-export function renderDashboard(summary) {
+export function renderDashboard(res) {
+    const summary = res.summary;
     if (!summary) return;
     const totalPersonnelEl = document.getElementById('dashboard-total-personnel');
     const onDutyEl = document.getElementById('dashboard-on-duty');
@@ -50,7 +81,7 @@ export function renderDashboard(summary) {
     if(onDutyEl) onDutyEl.textContent = summary.total_on_duty || '0';
     
     if (weekRangeEl && summary.weekly_date_range) {
-        weekRangeEl.textContent = `(รอบวันที่ ${summary.weekly_date_range})`;
+        weekRangeEl.textContent = `(${summary.weekly_date_range})`;
     }
 
     if(statusSummaryArea) {
@@ -66,7 +97,6 @@ export function renderDashboard(summary) {
         }
     }
 
-    // --- START: การเปลี่ยนแปลง ---
     if(deptStatusArea) {
         deptStatusArea.innerHTML = '';
         if (summary.all_departments && summary.all_departments.length > 0) {
@@ -76,42 +106,33 @@ export function renderDashboard(summary) {
                 const card = document.createElement('div');
                 card.className = `p-3 rounded-lg border ${isSubmitted ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300'}`;
                 
-                let statusLine = '';
-                let detailsLine = '';
+                let statusLine = isSubmitted ? `<p class="text-xs text-green-600">ส่งแล้ว (มีสถานะ ${submission.status_count} นาย)</p>` : `<p class="text-xs text-red-600">ยังไม่ส่ง</p>`;
+                let detailsLine = isSubmitted ? `<p class="text-xs text-gray-500 mt-1">โดย: ${escapeHTML(submission.submitter_fullname)} (${new Date(submission.timestamp).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })} น.)</p>` : '';
 
-                if (isSubmitted) {
-                    statusLine = `<p class="text-xs text-green-600">ส่งแล้ว (มีสถานะ ${submission.status_count} นาย)</p>`;
-                    const submittedTime = new Date(submission.timestamp).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
-                    detailsLine = `<p class="text-xs text-gray-500 mt-1">โดย: ${escapeHTML(submission.submitter_fullname)} (${submittedTime} น.)</p>`;
-                } else {
-                    statusLine = `<p class="text-xs text-red-600">ยังไม่ส่ง</p>`;
-                }
-
-                card.innerHTML = `
-                    <p class="font-semibold text-sm ${isSubmitted ? 'text-green-800' : 'text-red-800'}">${escapeHTML(dept)}</p>
-                    ${statusLine}
-                    ${detailsLine}
-                `;
+                card.innerHTML = `<p class="font-semibold text-sm ${isSubmitted ? 'text-green-800' : 'text-red-800'}">${escapeHTML(dept)}</p>${statusLine}${detailsLine}`;
                 deptStatusArea.appendChild(card);
             });
         } else {
             deptStatusArea.innerHTML = '<p class="text-gray-500 col-span-full">ไม่พบข้อมูลแผนก</p>';
         }
     }
-    // --- END: การเปลี่ยนแปลง ---
 }
 
-
-export function renderPersonnel(personnel) {
+export function renderPersonnel(res) {
     if(!window.personnelListArea) return;
+    const { personnel, total, page } = res;
     window.personnelListArea.innerHTML = '';
+    
     if (!personnel || personnel.length === 0) {
         window.personnelListArea.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-500">ไม่พบข้อมูลกำลังพล</td></tr>';
+        document.getElementById('personnel-pagination').innerHTML = '';
         return;
     }
+    
+    const startNumber = (page - 1) * ITEMS_PER_PAGE + 1;
     personnel.forEach((p, index) => {
         const row = document.createElement('tr');
-        row.innerHTML = `<td class="px-4 py-2">${index + 1}</td>
+        row.innerHTML = `<td class="px-4 py-2">${startNumber + index}</td>
                          <td class="px-4 py-2">${escapeHTML(p.rank)}</td>
                          <td class="px-4 py-2">${escapeHTML(p.first_name)}</td>
                          <td class="px-4 py-2">${escapeHTML(p.last_name)}</td>
@@ -124,15 +145,24 @@ export function renderPersonnel(personnel) {
                          </td>`;
         window.personnelListArea.appendChild(row);
     });
+
+    renderPagination('personnel-pagination', total, page, (newPage) => {
+        window.personnelCurrentPage = newPage;
+        window.loadDataForPane('pane-personnel');
+    });
 }
 
-export function renderUsers(users) {
+export function renderUsers(res) {
     if(!window.userListArea) return;
+    const { users, total, page } = res;
     window.userListArea.innerHTML = '';
-     if (!users || users.length === 0) {
+    
+    if (!users || users.length === 0) {
         window.userListArea.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">ไม่พบข้อมูลผู้ใช้</td></tr>';
+        document.getElementById('user-pagination').innerHTML = '';
         return;
     }
+    
     users.forEach(u => {
         const row = document.createElement('tr');
         const roleText = u.role === 'admin' ? 'Admin' : 'User';
@@ -148,10 +178,17 @@ export function renderUsers(users) {
                          </td>`;
         window.userListArea.appendChild(row);
     });
+
+    renderPagination('user-pagination', total, page, (newPage) => {
+        window.userCurrentPage = newPage;
+        window.loadDataForPane('pane-admin');
+    });
 }
 
-export function renderStatusSubmissionForm(personnel, res) {
-    const submissionStatus = res ? res.submission_status : null;
+export function renderStatusSubmissionForm(res) {
+    const personnel = res.personnel;
+    const submissionStatus = res.submission_status;
+    const weekly_date_range = res.weekly_date_range;
     const selectorContainer = document.getElementById('admin-dept-selector-container');
     const bulkButtonContainer = document.getElementById('bulk-status-buttons');
     const submissionInfoArea = document.getElementById('submission-info-area');
@@ -177,26 +214,18 @@ export function renderStatusSubmissionForm(personnel, res) {
 
     const updateRowHighlight = (selectElement) => {
         const row = selectElement.closest('tr');
-        if (selectElement.value !== 'ไม่มี') {
-            row.classList.add('row-selected');
-        } else {
-            row.classList.remove('row-selected');
-        }
+        row.classList.toggle('row-selected', selectElement.value !== 'ไม่มี');
     };
 
     const setAllStatus = (status) => {
-        const allSelects = window.statusSubmissionListArea.querySelectorAll('.status-select');
-        allSelects.forEach(select => {
+        window.statusSubmissionListArea.querySelectorAll('.status-select').forEach(select => {
             select.value = status;
             select.dispatchEvent(new Event('change'));
         });
     };
 
     bulkButtonContainer.innerHTML = '';
-    const bulkActions = [
-        { label: 'ล้างค่า ทั้งหมด', value: 'ไม่มี', class: 'bg-gray-400 hover:bg-gray-500' }
-    ];
-
+    const bulkActions = [{ label: 'ล้างค่า ทั้งหมด', value: 'ไม่มี', class: 'bg-gray-400 hover:bg-gray-500' }];
     bulkActions.forEach(action => {
         const button = document.createElement('button');
         button.textContent = action.label;
@@ -205,11 +234,16 @@ export function renderStatusSubmissionForm(personnel, res) {
         bulkButtonContainer.appendChild(button);
     });
 
-
     const displayPersonnelForDept = (dept, itemsToEdit = []) => {
-        window.submitStatusTitle.textContent = `ส่งยอดกำลังพล แผนก ${escapeHTML(dept)}`;
+        window.submitStatusTitle.innerHTML = `ส่งยอดกำลังพล แผนก ${escapeHTML(dept)}`;
+        if (weekly_date_range) {
+            const weekRangeEl = document.createElement('span');
+            weekRangeEl.className = 'text-lg text-gray-500 font-normal ml-2';
+            weekRangeEl.textContent = `(${weekly_date_range})`;
+            window.submitStatusTitle.appendChild(weekRangeEl);
+        }
+
         window.statusSubmissionListArea.innerHTML = '';
-        
         const personnelInDept = personnel.filter(p => p.department === dept);
 
         if (personnelInDept.length === 0) {
@@ -223,11 +257,16 @@ export function renderStatusSubmissionForm(personnel, res) {
             row.dataset.personnelId = escapeHTML(p.id);
             row.dataset.personnelName = personnelName;
             row.innerHTML = `
-                <td class="px-4 py-2">${index + 1}</td><td class="px-4 py-2">${personnelName}</td>
+                <td class="px-4 py-2">${index + 1}</td>
+                <td class="px-4 py-2">${personnelName}</td>
                 <td class="px-4 py-2">
                     <select class="status-select w-full border rounded px-2 py-1 bg-white">
-                        <option value="ไม่มี">ไม่มี</option><option value="ราชการ">ราชการ</option><option value="คุมงาน">คุมงาน</option>
-                        <option value="ศึกษา">ศึกษา</option><option value="ลากิจ">ลากิจ</option><option value="ลาพักผ่อน">ลาพักผ่อน</option>
+                        <option value="ไม่มี">ไม่มี</option>
+                        <option value="ราชการ">ราชการ</option>
+                        <option value="คุมงาน">คุมงาน</option>
+                        <option value="ศึกษา">ศึกษา</option>
+                        <option value="ลากิจ">ลากิจ</option>
+                        <option value="ลาพักผ่อน">ลาพักผ่อน</option>
                     </select>
                 </td>
                 <td class="px-4 py-2"><input type="text" class="details-input w-full border rounded px-2 py-1" placeholder="รายละเอียด/สถานที่..."></td>
@@ -246,7 +285,6 @@ export function renderStatusSubmissionForm(personnel, res) {
                 row.querySelector('.end-date-input').value = editData.end_date;
                 updateRowHighlight(statusSelect);
             }
-
             window.statusSubmissionListArea.appendChild(row);
         });
     };
@@ -254,41 +292,30 @@ export function renderStatusSubmissionForm(personnel, res) {
     if (window.currentUser.role === 'admin') {
         selectorContainer.innerHTML = '';
         const uniqueDepts = [...new Set(personnel.map(p => p.department))];
-
         const label = document.createElement('label');
         label.htmlFor = 'admin-dept-selector';
         label.className = 'block text-sm font-medium text-gray-700 mb-1';
         label.textContent = 'เลือกแผนกเพื่อส่งยอด';
-
         const selector = document.createElement('select');
         selector.id = 'admin-dept-selector';
         selector.className = 'w-full md:w-1/3 border rounded px-2 py-2 bg-white shadow-sm';
-        
         uniqueDepts.forEach(dept => {
             const option = document.createElement('option');
             option.value = dept;
             option.textContent = dept;
             selector.appendChild(option);
         });
-
         selectorContainer.appendChild(label);
         selectorContainer.appendChild(selector);
-
         if (window.editingReportData) {
             const { department, items } = window.editingReportData;
             selector.value = department;
             displayPersonnelForDept(department, items);
             delete window.editingReportData;
         } else {
-            if (uniqueDepts.length > 0) {
-                displayPersonnelForDept(uniqueDepts[0]);
-            }
+            if (uniqueDepts.length > 0) displayPersonnelForDept(uniqueDepts[0]);
         }
-
-        selector.addEventListener('change', (e) => {
-            displayPersonnelForDept(e.target.value);
-        });
-
+        selector.addEventListener('change', (e) => displayPersonnelForDept(e.target.value));
     } else {
         selectorContainer.innerHTML = '';
         if (window.editingReportData) {
@@ -301,8 +328,17 @@ export function renderStatusSubmissionForm(personnel, res) {
     }
 }
 
+export function renderWeeklyReport(res) {
+    const reports = res.reports; 
+    const weekly_date_range = res.weekly_date_range;
 
-export function renderWeeklyReport(reports) {
+    const weekRangeEl = document.getElementById('report-week-range');
+    if (weekRangeEl && weekly_date_range) {
+        weekRangeEl.textContent = `(${weekly_date_range})`;
+    } else if (weekRangeEl) {
+        weekRangeEl.textContent = '';
+    }
+
     if(!window.reportContainer) return;
     window.reportContainer.innerHTML = '';
     window.currentWeeklyReports = reports;
@@ -310,126 +346,41 @@ export function renderWeeklyReport(reports) {
         window.reportContainer.innerHTML = '<p class="text-center text-gray-500">ยังไม่มีรายงานในระบบ</p>';
         return;
     }
-
     const reportsByDept = reports.reduce((acc, report) => {
         const dept = report.department || 'ไม่ระบุแผนก';
         if (!acc[dept]) {
-            acc[dept] = {
-                submitterName: `${escapeHTML(report.rank)} ${escapeHTML(report.first_name)} ${escapeHTML(report.last_name)}`,
-                timestamp: report.timestamp,
-                items: []
-            };
+            acc[dept] = { submitterName: `${escapeHTML(report.rank)} ${escapeHTML(report.first_name)} ${escapeHTML(report.last_name)}`, timestamp: report.timestamp, items: [] };
         }
         acc[dept].items.push(...report.items);
         return acc;
     }, {});
-
     window.reportContainer.className = 'space-y-6';
-
     for (const department in reportsByDept) {
         const deptReport = reportsByDept[department];
         const reportWrapper = document.createElement('div');
         reportWrapper.className = 'p-4 border rounded-lg bg-gray-50';
-
-        const itemsHtml = deptReport.items.map((item, index) => {
-            const dateRange = formatThaiDateRange(item.start_date, item.end_date);
-            return `
-            <tr class="border-t">
-                <td class="py-2 pr-2 text-center">${index + 1}</td>
-                <td class="py-2 px-2">${escapeHTML(item.personnel_name)}</td>
-                <td class="py-2 px-2 text-blue-600">${escapeHTML(item.status)}</td>
-                <td class="py-2 px-2 text-gray-600">${escapeHTML(item.details) || '-'}</td>
-                <td class="py-2 pl-2 text-gray-600">${dateRange}</td>
-            </tr>
-        `}).join('');
-
+        const itemsHtml = deptReport.items.map((item, index) => `<tr class="border-t"><td class="py-2 pr-2 text-center">${index + 1}</td><td class="py-2 px-2">${escapeHTML(item.personnel_name)}</td><td class="py-2 px-2 text-blue-600">${escapeHTML(item.status)}</td><td class="py-2 px-2 text-gray-600">${escapeHTML(item.details) || '-'}</td><td class="py-2 pl-2 text-gray-600">${formatThaiDateRangeArabic(item.start_date, item.end_date)}</td></tr>`).join('');
         const submittedTime = new Date(deptReport.timestamp).toLocaleString('th-TH');
-
-        reportWrapper.innerHTML = `
-            <div class="flex flex-wrap justify-between items-center mb-3 gap-2">
-                <div>
-                    <h3 class="text-lg font-semibold text-gray-700">แผนก: ${escapeHTML(department)}</h3>
-                    <p class="text-sm text-gray-500">ส่งโดย: ${deptReport.submitterName}</p>
-                </div>
-                <span class="text-sm text-gray-500">ส่งล่าสุดเมื่อ: ${submittedTime} น.</span>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="min-w-full bg-white text-sm">
-                     <thead>
-                        <tr>
-                            <th class="text-center font-medium text-gray-500 uppercase pb-1 w-[5%]">ลำดับ</th>
-                            <th class="text-left font-medium text-gray-500 uppercase pb-1 w-[30%]">ชื่อ-สกุล</th>
-                            <th class="text-left font-medium text-gray-500 uppercase pb-1 w-[15%]">สถานะ</th>
-                            <th class="text-left font-medium text-gray-500 uppercase pb-1 w-[30%]">รายละเอียด</th>
-                            <th class="text-left font-medium text-gray-500 uppercase pb-1 w-[20%]">ช่วงวันที่</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${itemsHtml}
-                    </tbody>
-                </table>
-            </div>
-        `;
+        reportWrapper.innerHTML = `<div class="flex flex-wrap justify-between items-center mb-3 gap-2"><div><h3 class="text-lg font-semibold text-gray-700">แผนก: ${escapeHTML(department)}</h3><p class="text-sm text-gray-500">ส่งโดย: ${deptReport.submitterName}</p></div><span class="text-sm text-gray-500">ส่งล่าสุดเมื่อ: ${submittedTime} น.</span></div><div class="overflow-x-auto"><table class="min-w-full bg-white text-sm"><thead><tr><th class="text-center font-medium text-gray-500 uppercase pb-1 w-[5%]">ลำดับ</th><th class="text-left font-medium text-gray-500 uppercase pb-1 w-[30%]">ชื่อ-สกุล</th><th class="text-left font-medium text-gray-500 uppercase pb-1 w-[15%]">สถานะ</th><th class="text-left font-medium text-gray-500 uppercase pb-1 w-[30%]">รายละเอียด</th><th class="text-left font-medium text-gray-500 uppercase pb-1 w-[20%]">ช่วงวันที่</th></tr></thead><tbody>${itemsHtml}</tbody></table></div>`;
         window.reportContainer.appendChild(reportWrapper);
     }
 }
 
-
-export function renderSubmissionHistory(history) {
+export function renderSubmissionHistory(res) {
+    const history = res.history;
     const historyContainer = document.getElementById('history-container');
     if (!historyContainer) return;
     historyContainer.innerHTML = '';
-
     if (!history || history.length === 0) {
         historyContainer.innerHTML = '<p class="text-center text-gray-500">ไม่พบประวัติการส่งรายงาน</p>';
         return;
     }
-
     history.forEach(report => {
         const reportWrapper = document.createElement('div');
         reportWrapper.className = 'p-4 border rounded-lg bg-gray-50';
-        
-        const itemsHtml = report.items.map((item, index) => {
-            const dateRange = formatThaiDateRange(item.start_date, item.end_date);
-            return `
-            <tr class="border-t">
-                <td class="py-2 pr-2 text-center">${index + 1}</td>
-                <td class="py-2 px-2">${escapeHTML(item.personnel_name)}</td>
-                <td class="py-2 px-2 text-blue-600">${escapeHTML(item.status)}</td>
-                <td class="py-2 px-2 text-gray-600">${escapeHTML(item.details) || '-'}</td>
-                <td class="py-2 pl-2 text-gray-600">${dateRange}</td>
-            </tr>
-        `}).join('');
-        
-        const editButtonHtml = report.source === 'active' 
-            ? `<button data-id="${report.id}" class="edit-history-btn bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold py-1 px-3 rounded-lg">แก้ไข</button>`
-            : '';
-
-        reportWrapper.innerHTML = `
-            <div class="flex flex-wrap justify-between items-center mb-3 gap-2">
-                <div>
-                    <h3 class="text-lg font-semibold text-gray-700">รายงานวันที่ ${formatThaiDate(report.date)}</h3>
-                    <span class="text-sm text-gray-500">ส่งเมื่อ: ${new Date(report.timestamp).toLocaleString('th-TH')}</span>
-                </div>
-                ${editButtonHtml}
-            </div>
-            <div class="overflow-x-auto">
-                <table class="min-w-full bg-white text-sm">
-                     <thead>
-                        <tr>
-                            <th class="text-center font-medium text-gray-500 uppercase pb-1 w-[5%]">ลำดับ</th>
-                            <th class="text-left font-medium text-gray-500 uppercase pb-1 w-[30%]">ชื่อ-สกุล</th>
-                            <th class="text-left font-medium text-gray-500 uppercase pb-1 w-[15%]">สถานะ</th>
-                            <th class="text-left font-medium text-gray-500 uppercase pb-1 w-[30%]">รายละเอียด</th>
-                            <th class="text-left font-medium text-gray-500 uppercase pb-1 w-[20%]">ช่วงวันที่</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${itemsHtml}
-                    </tbody>
-                </table>
-            </div>
-        `;
+        const itemsHtml = report.items.map((item, index) => `<tr class="border-t"><td class="py-2 pr-2 text-center">${index + 1}</td><td class="py-2 px-2">${escapeHTML(item.personnel_name)}</td><td class="py-2 px-2 text-blue-600">${escapeHTML(item.status)}</td><td class="py-2 px-2 text-gray-600">${escapeHTML(item.details) || '-'}</td><td class="py-2 pl-2 text-gray-600">${formatThaiDateRangeArabic(item.start_date, item.end_date)}</td></tr>`).join('');
+        const editButtonHtml = report.source === 'active' ? `<button data-id="${report.id}" class="edit-history-btn bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold py-1 px-3 rounded-lg">แก้ไข</button>` : '';
+        reportWrapper.innerHTML = `<div class="flex flex-wrap justify-between items-center mb-3 gap-2"><div><h3 class="text-lg font-semibold text-gray-700">รายงานวันที่ ${formatThaiDateArabic(report.date)}</h3><span class="text-sm text-gray-500">ส่งเมื่อ: ${new Date(report.timestamp).toLocaleString('th-TH')}</span></div>${editButtonHtml}</div><div class="overflow-x-auto"><table class="min-w-full bg-white text-sm"><thead><tr><th class="text-center font-medium text-gray-500 uppercase pb-1 w-[5%]">ลำดับ</th><th class="text-left font-medium text-gray-500 uppercase pb-1 w-[30%]">ชื่อ-สกุล</th><th class="text-left font-medium text-gray-500 uppercase pb-1 w-[15%]">สถานะ</th><th class="text-left font-medium text-gray-500 uppercase pb-1 w-[30%]">รายละเอียด</th><th class="text-left font-medium text-gray-500 uppercase pb-1 w-[20%]">ช่วงวันที่</th></tr></thead><tbody>${itemsHtml}</tbody></table></div>`;
         historyContainer.appendChild(reportWrapper);
     });
 }
@@ -456,66 +407,21 @@ export function renderArchivedReports(reports) {
         window.archiveContainer.innerHTML = '<p class="text-center text-gray-500">ไม่พบรายงานในเดือนที่เลือก</p>';
         return;
     }
-    
     const reportsByDate = reports.reduce((acc, report) => {
         const date = report.date;
-        if (!acc[date]) {
-            acc[date] = [];
-        }
+        if (!acc[date]) acc[date] = [];
         acc[date].push(report);
         return acc;
     }, {});
-
-    const sortedDates = Object.keys(reportsByDate).sort((a, b) => new Date(b) - new Date(a));
-
-    sortedDates.forEach(date => {
-        const dailyReports = reportsByDate[date];
+    Object.keys(reportsByDate).sort((a, b) => new Date(b) - new Date(a)).forEach(date => {
         const dateCard = document.createElement('div');
         dateCard.className = 'mb-6 p-4 border rounded-lg bg-gray-50';
-
         let reportsHtml = '';
-        dailyReports.forEach(report => {
-            const itemsHtml = report.items.map((item, index) => {
-                const dateRange = formatThaiDateRange(item.start_date, item.end_date);
-                return `
-                <tr class="border-t">
-                    <td class="py-2 pr-2 text-center">${index + 1}</td>
-                    <td class="py-2 px-2">${escapeHTML(item.personnel_name)}</td>
-                    <td class="py-2 px-2 text-blue-600">${escapeHTML(item.status)}</td>
-                    <td class="py-2 px-2 text-gray-600">${escapeHTML(item.details) || '-'}</td>
-                    <td class="py-2 pl-2 text-gray-600">${dateRange}</td>
-                </tr>
-            `}).join('');
-
-            reportsHtml += `
-                <div class="mt-4">
-                    <div class="flex justify-between items-center text-sm text-gray-500 mb-2">
-                        <span>แผนก: ${escapeHTML(report.department || '')}</span>
-                        <span>ส่งโดย: ${escapeHTML(report.submitted_by)}</span>
-                    </div>
-                    <table class="min-w-full bg-white text-sm">
-                        <thead>
-                            <tr>
-                                <th class="text-center font-medium text-gray-500 uppercase pb-1 w-[5%]">ลำดับ</th>
-                                <th class="text-left font-medium text-gray-500 uppercase pb-1 w-[30%]">ชื่อ-สกุล</th>
-                                <th class="text-left font-medium text-gray-500 uppercase pb-1 w-[15%]">สถานะ</th>
-                                <th class="text-left font-medium text-gray-500 uppercase pb-1 w-[30%]">รายละเอียด</th>
-                                <th class="text-left font-medium text-gray-500 uppercase pb-1 w-[20%]">ช่วงวันที่</th>
-                            </tr>
-                        </thead>
-                        <tbody>${itemsHtml}</tbody>
-                    </table>
-                </div>
-            `;
+        reportsByDate[date].forEach(report => {
+            const itemsHtml = report.items.map((item, index) => `<tr class="border-t"><td class="py-2 pr-2 text-center">${index + 1}</td><td class="py-2 px-2">${escapeHTML(item.personnel_name)}</td><td class="py-2 px-2 text-blue-600">${escapeHTML(item.status)}</td><td class="py-2 px-2 text-gray-600">${escapeHTML(item.details) || '-'}</td><td class="py-2 pl-2 text-gray-600">${formatThaiDateRangeArabic(item.start_date, item.end_date)}</td></tr>`).join('');
+            reportsHtml += `<div class="mt-4"><div class="flex justify-between items-center text-sm text-gray-500 mb-2"><span>แผนก: ${escapeHTML(report.department || '')}</span><span>ส่งโดย: ${escapeHTML(report.submitted_by)}</span></div><table class="min-w-full bg-white text-sm"><thead><tr><th class="text-center font-medium text-gray-500 uppercase pb-1 w-[5%]">ลำดับ</th><th class="text-left font-medium text-gray-500 uppercase pb-1 w-[30%]">ชื่อ-สกุล</th><th class="text-left font-medium text-gray-500 uppercase pb-1 w-[15%]">สถานะ</th><th class="text-left font-medium text-gray-500 uppercase pb-1 w-[30%]">รายละเอียด</th><th class="text-left font-medium text-gray-500 uppercase pb-1 w-[20%]">ช่วงวันที่</th></tr></thead><tbody>${itemsHtml}</tbody></table></div>`;
         });
-
-        dateCard.innerHTML = `
-            <div class="flex justify-between items-center">
-                <h3 class="text-lg font-semibold text-gray-800">ประวัติการเก็บรายงาน วันที่ ${formatThaiDate(date)}</h3>
-                <button class="download-daily-archive-btn bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded" data-date="${escapeHTML(date)}">ดาวน์โหลดของวันนี้</button>
-            </div>
-            ${reportsHtml}
-        `;
+        dateCard.innerHTML = `<div class="flex justify-between items-center"><h3 class="text-lg font-semibold text-gray-800">ประวัติการเก็บรายงาน วันที่ ${formatThaiDateArabic(date)}</h3><button class="download-daily-archive-btn bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded" data-date="${escapeHTML(date)}">ดาวน์โหลดของวันนี้</button></div>${reportsHtml}`;
         window.archiveContainer.appendChild(dateCard);
     });
 }
