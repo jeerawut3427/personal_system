@@ -121,7 +121,14 @@ def handle_login(payload, conn, cursor, client_address):
         conn.commit()
         user_info = {k: user_data[k] for k in user_data.keys() if k not in ['salt', 'key']}
         expires_time = time.time() + SESSION_TIMEOUT_SECONDS
-        cookie_attrs = [f'session_token={session_token}', 'HttpOnly', 'Path=/', 'SameSite=Strict', 'Secure', f'Max-Age={SESSION_TIMEOUT_SECONDS}', f'Expires={formatdate(expires_time, usegmt=True)}']
+        cookie_attrs = [
+            f'session_token={session_token}',
+            'HttpOnly',
+            'Path=/',
+            'SameSite=Strict',
+            f'Max-Age={SESSION_TIMEOUT_SECONDS}',
+            f'Expires={formatdate(expires_time, usegmt=True)}'
+        ]
         headers = [('Set-Cookie', '; '.join(cookie_attrs))]
         return {"status": "success", "user": user_info}, headers
     else:
@@ -134,80 +141,8 @@ def handle_logout(payload, conn, cursor, session):
     if token_to_delete:
         cursor.execute("DELETE FROM sessions WHERE token = ?", (token_to_delete,))
         conn.commit()
-    headers = [('Set-Cookie', 'session_token=; HttpOnly; Path=/; SameSite=Strict; Secure; Expires=Thu, 01 Jan 1970 00:00:00 GMT')]
+    headers = [('Set-Cookie', 'session_token=; HttpOnly; Path=/; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT')]
     return {"status": "success", "message": "ออกจากระบบสำเร็จ"}, headers
-
-def handle_list_personnel(payload, conn, cursor, session):
-    page = payload.get("page", 1)
-    search_term = payload.get("searchTerm", "").strip()
-    fetch_all = payload.get("fetchAll", False)
-    offset = (page - 1) * ITEMS_PER_PAGE
-
-    base_query = " FROM personnel"
-    params = []
-    where_clauses = []
-    
-    is_admin = session.get("role") == "admin"
-    if not is_admin:
-        where_clauses.append("department = ?")
-        params.append(session.get("department"))
-
-    if search_term:
-        where_clauses.append("(first_name LIKE ? OR last_name LIKE ? OR position LIKE ?)")
-        term = f"%{search_term}%"
-        params.extend([term, term, term])
-
-    where_clause_str = ""
-    if where_clauses:
-        where_clause_str = " WHERE " + " AND ".join(where_clauses)
-    
-    count_query = "SELECT COUNT(*) as total" + base_query + where_clause_str
-    cursor.execute(count_query, params)
-    total_items = cursor.fetchone()['total']
-
-    data_query = "SELECT *" + base_query + where_clause_str
-    if not fetch_all:
-        data_query += " LIMIT ? OFFSET ?"
-        params.extend([ITEMS_PER_PAGE, offset])
-
-    cursor.execute(data_query, params)
-    personnel = [{k: escape(str(v)) if v is not None else '' for k, v in dict(row).items()} for row in cursor.fetchall()]
-    
-    submission_status = None
-    if not is_admin:
-        cursor.execute("SELECT timestamp FROM status_reports WHERE department = ? ORDER BY timestamp DESC LIMIT 1", (session.get("department"),))
-        last_submission = cursor.fetchone()
-        if last_submission:
-            submission_status = {"timestamp": last_submission['timestamp']}
-
-    weekly_date_range = get_next_week_range_str()
-
-    return {"status": "success", "personnel": personnel, "total": total_items, "page": page, "submission_status": submission_status, "weekly_date_range": weekly_date_range}
-
-# ... (All other handler functions remain unchanged)
-def handle_get_status_reports(payload, conn, cursor):
-    query = """
-    SELECT 
-        sr.id, sr.date, sr.department, sr.timestamp, sr.report_data,
-        u.rank, u.first_name, u.last_name
-    FROM 
-        status_reports sr
-    JOIN 
-        users u ON sr.submitted_by = u.username
-    ORDER BY 
-        sr.timestamp DESC
-    """
-    cursor.execute(query)
-    reports = []
-    for row in cursor.fetchall():
-        report = dict(row)
-        report["items"] = json.loads(report["report_data"])
-        del report["report_data"]
-        reports.append(report)
-    
-    weekly_date_range = get_next_week_range_str()
-    
-    return {"status": "success", "reports": reports, "weekly_date_range": weekly_date_range}
 
 def handle_get_dashboard_summary(payload, conn, cursor):
     cursor.execute("SELECT DISTINCT department FROM personnel WHERE department IS NOT NULL AND department != ''")
@@ -282,6 +217,37 @@ def handle_delete_user(payload, conn, cursor):
     conn.commit()
     return {"status": "success", "message": f"ลบผู้ใช้ '{escape(username)}' สำเร็จ"}
 
+def handle_list_personnel(payload, conn, cursor, session):
+    page = payload.get("page", 1)
+    search_term = payload.get("searchTerm", "").strip()
+    fetch_all = payload.get("fetchAll", False)
+    offset = (page - 1) * ITEMS_PER_PAGE
+    base_query = " FROM personnel"
+    params, where_clauses = [], []
+    is_admin, department = session.get("role") == "admin", session.get("department")
+    if not is_admin:
+        where_clauses.append("department = ?"); params.append(department)
+    if search_term:
+        where_clauses.append("(first_name LIKE ? OR last_name LIKE ? OR position LIKE ?)")
+        params.extend([f"%{search_term}%"] * 3)
+    where_clause_str = ""
+    if where_clauses: where_clause_str = " WHERE " + " AND ".join(where_clauses)
+    count_query = "SELECT COUNT(*) as total" + base_query + where_clause_str
+    cursor.execute(count_query, params)
+    total_items = cursor.fetchone()['total']
+    data_query = "SELECT *" + base_query + where_clause_str
+    if not fetch_all:
+        data_query += " LIMIT ? OFFSET ?"
+        params.extend([ITEMS_PER_PAGE, offset])
+    cursor.execute(data_query, params)
+    personnel = [{k: escape(str(v)) if v is not None else '' for k, v in dict(row).items()} for row in cursor.fetchall()]
+    submission_status = None
+    if not is_admin:
+        cursor.execute("SELECT timestamp FROM status_reports WHERE department = ? ORDER BY timestamp DESC LIMIT 1", (session.get("department"),))
+        last_submission = cursor.fetchone()
+        if last_submission: submission_status = {"timestamp": last_submission['timestamp']}
+    return {"status": "success", "personnel": personnel, "total": total_items, "page": page, "submission_status": submission_status, "weekly_date_range": get_next_week_range_str()}
+
 def handle_get_personnel_details(payload, conn, cursor):
     person_id = payload.get("id")
     if not person_id: return {"status": "error", "message": "ไม่พบ ID ของกำลังพล"}
@@ -332,6 +298,13 @@ def handle_submit_status_report(payload, conn, cursor, session):
                    (str(uuid.uuid4()), report_data["date"], submitted_by, user_department, json.dumps(report_data["items"]), timestamp_str))
     conn.commit()
     return {"status": "success", "message": "ส่งยอดกำลังพลสำเร็จ"}
+
+def handle_get_status_reports(payload, conn, cursor):
+    cursor.execute("SELECT sr.id, sr.date, sr.department, sr.timestamp, sr.report_data, u.rank, u.first_name, u.last_name FROM status_reports sr JOIN users u ON sr.submitted_by = u.username ORDER BY sr.timestamp DESC")
+    reports = []
+    for row in cursor.fetchall():
+        report = dict(row); report["items"] = json.loads(report["report_data"]); del report["report_data"]; reports.append(report)
+    return {"status": "success", "reports": reports, "weekly_date_range": get_next_week_range_str()}
 
 def handle_archive_reports(payload, conn, cursor):
     for report in payload.get("reports", []):
