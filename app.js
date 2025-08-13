@@ -194,10 +194,8 @@ function initializePage() {
         archiveConfirmModal.classList.add('active');
     });
     if (cancelArchiveBtn) cancelArchiveBtn.addEventListener('click', () => archiveConfirmModal.classList.remove('active'));
-    if (confirmArchiveBtn) confirmArchiveBtn.addEventListener('click', () => {
-        const weekRangeText = document.getElementById('report-week-range')?.textContent || '';
-        handlers.handleExportAndArchive(weekRangeText);
-    });
+    if (confirmArchiveBtn) confirmArchiveBtn.addEventListener('click', handlers.handleExportAndArchive);
+    
     if (showArchiveBtn) showArchiveBtn.addEventListener('click', handlers.handleShowArchive);
     if (archiveContainer) archiveContainer.addEventListener('click', handlers.handleArchiveDownloadClick);
     

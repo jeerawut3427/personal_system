@@ -3,7 +3,7 @@
 
 import { sendRequest } from './api.js';
 import { showMessage, openPersonnelModal, openUserModal, renderArchivedReports } from './ui.js';
-import { exportSingleReportToExcel, formatThaiDateArabic, formatThaiDateRangeArabic } from './utils.js';
+import { exportSingleReportToExcel, formatThaiDateArabic, formatThaiDateRangeArabic, escapeHTML } from './utils.js';
 
 // All functions access global variables and DOM via the window object
 
@@ -246,19 +246,14 @@ export async function handleSubmitStatusReport() {
     }
 }
 
-export async function handleExportAndArchive(weekRangeText) {
-    const fileNameInput = document.getElementById('export-filename-input');
-    let fileName = fileNameInput.value.trim();
-    if (!fileName.toLowerCase().endsWith('.xlsx')) {
-        fileName += '.xlsx';
-    }
-
+export async function handleExportAndArchive() {
+    const weekRangeText = document.getElementById('report-week-range')?.textContent || '';
     window.archiveConfirmModal.classList.remove('active');
     if (!window.currentWeeklyReports || window.currentWeeklyReports.length === 0) {
         showMessage('ไม่มีข้อมูลรายงานที่จะส่งออก', false);
         return;
     }
-    exportSingleReportToExcel(window.currentWeeklyReports, fileName, weekRangeText);
+    exportSingleReportToExcel(window.currentWeeklyReports, `รายงานกำลังพล-${new Date().toISOString().split('T')[0]}.xlsx`, weekRangeText);
     try {
         const response = await sendRequest('archive_reports', { reports: window.currentWeeklyReports });
         showMessage(response.message, response.status === 'success');
