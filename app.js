@@ -26,8 +26,8 @@ function performLogout() {
 }
 
 function autoLogoutUser() {
-    ui.showMessage("คุณไม่มีการใช้งานเป็นเวลานาน ระบบจะทำการออกจากระบบเพื่อความปลอดภัย", false);
-    setTimeout(performLogout, 3000);
+    alert("คุณไม่มีการใช้งานเป็นเวลานาน ระบบจะทำการออกจากระบบเพื่อความปลอดภัย");
+    performLogout();
 }
 
 function resetInactivityTimer() {
@@ -148,9 +148,6 @@ function initializePage() {
     welcomeMessage.textContent = `ล็อกอินในฐานะ: ${escapeHTML(currentUser.username)} (${escapeHTML(userRole)})`;
 
     const is_admin = (userRole === 'admin');
-    
-    // Show/hide tabs based on role
-    document.getElementById('tab-user-dashboard').classList.toggle('hidden', is_admin);
     document.getElementById('tab-dashboard').classList.toggle('hidden', !is_admin);
     document.getElementById('tab-submit-status').classList.remove('hidden');
     document.getElementById('tab-history').classList.remove('hidden');
@@ -159,48 +156,20 @@ function initializePage() {
     document.getElementById('tab-personnel').classList.toggle('hidden', !is_admin);
     document.getElementById('tab-admin').classList.toggle('hidden', !is_admin);
 
-    // Determine default tab
-    const urlParams = new URLSearchParams(window.location.search);
-    let activeTabId = urlParams.get('tab');
-
-    if (!activeTabId || !document.getElementById(`tab-${activeTabId}`)) {
-        activeTabId = is_admin ? 'dashboard' : 'user-dashboard';
+    if (is_admin) {
+        switchTab('tab-dashboard');
+    } else {
+        switchTab('tab-submit-status');
     }
-    
-    displayTabContent(`tab-${activeTabId}`);
 
-    logoutBtn.addEventListener('click', () => {
-        ui.showCustomConfirm("ยืนยันการออกจากระบบ", "คุณต้องการออกจากระบบใช่หรือไม่?", () => {
-            performLogout();
-        });
-    });
+    logoutBtn.addEventListener('click', () => performLogout());
 
-    // --- Setup Inactivity & Back-to-Top Listeners ---
     window.addEventListener('mousemove', resetInactivityTimer);
     window.addEventListener('keydown', resetInactivityTimer);
     window.addEventListener('click', resetInactivityTimer);
     resetInactivityTimer();
 
-    const backToTopBtn = document.getElementById('back-to-top-btn');
-    window.addEventListener('scroll', () => {
-        if (window.scrollY > 300) {
-            backToTopBtn.classList.remove('hidden');
-        } else {
-            backToTopBtn.classList.add('hidden');
-        }
-    });
-    backToTopBtn.addEventListener('click', () => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-
-    // Event Listeners
-    tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            const tabId = tab.id.replace('tab-', '');
-            window.location.href = `main.html?tab=${tabId}`;
-        });
-    });
-    
+    tabs.forEach(tab => tab.addEventListener('click', () => switchTab(tab.id)));
     if(addPersonnelBtn) addPersonnelBtn.addEventListener('click', () => ui.openPersonnelModal());
     if(cancelPersonnelBtn) cancelPersonnelBtn.addEventListener('click', () => personnelModal.classList.remove('active'));
     if(personnelForm) personnelForm.addEventListener('submit', handlers.handlePersonnelFormSubmit);
@@ -269,7 +238,6 @@ function initializePage() {
 window.loadDataForPane = async function(paneId) {
     let payload = {};
     const actions = {
-        'pane-user-dashboard': { action: 'get_user_dashboard_summary', renderer: ui.renderUserDashboard },
         'pane-dashboard': { action: 'get_dashboard_summary', renderer: ui.renderDashboard },
         'pane-personnel': { action: 'list_personnel', renderer: ui.renderPersonnel, searchInput: personnelSearchInput, pageState: 'personnelCurrentPage' },
         'pane-admin': { action: 'list_users', renderer: ui.renderUsers, searchInput: userSearchInput, pageState: 'userCurrentPage' },
@@ -311,15 +279,16 @@ window.loadDataForPane = async function(paneId) {
     }
 }
 
-function displayTabContent(tabId) {
+window.switchTab = function(tabId) {
     tabs.forEach(tab => {
         const paneId = tab.id.replace('tab-', 'pane-');
         const pane = document.getElementById(paneId);
         if(!pane) return;
-
         if (tab.id === tabId) {
             tab.classList.add('active');
             pane.classList.remove('hidden');
+            if (paneId === 'pane-personnel') window.personnelCurrentPage = 1;
+            if (paneId === 'pane-admin') window.userCurrentPage = 1;
             loadDataForPane(paneId);
         } else {
             tab.classList.remove('active');

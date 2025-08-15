@@ -14,7 +14,6 @@ from collections import defaultdict
 import time
 import re
 from email.utils import formatdate
-from urllib.parse import urlparse
 
 # --- Database Setup ---
 DB_FILE = "database.db"
@@ -164,36 +163,6 @@ def handle_get_dashboard_summary(payload, conn, cursor):
     total_personnel = cursor.fetchone()['total']
     total_on_duty = total_personnel - sum(status_summary.values())
     summary = {"all_departments": all_departments, "submitted_info": submitted_info, "status_summary": dict(status_summary), "total_personnel": total_personnel, "total_on_duty": total_on_duty, "weekly_date_range": get_next_week_range_str()}
-    return {"status": "success", "summary": summary}
-
-def handle_get_user_dashboard_summary(payload, conn, cursor, session):
-    user_dept = session.get("department")
-    if not user_dept:
-        return {"status": "error", "message": "ไม่พบข้อมูลแผนก"}
-
-    cursor.execute("SELECT COUNT(*) as total FROM personnel WHERE department = ?", (user_dept,))
-    total_personnel = cursor.fetchone()['total']
-
-    cursor.execute("SELECT report_data, timestamp FROM status_reports WHERE department = ? ORDER BY timestamp DESC LIMIT 1", (user_dept,))
-    report = cursor.fetchone()
-    
-    away_personnel = []
-    on_duty = total_personnel
-    submission_status = {"submitted": False, "timestamp": None}
-
-    if report:
-        items = json.loads(report['report_data'])
-        on_duty = total_personnel - len(items)
-        away_personnel = items
-        submission_status = {"submitted": True, "timestamp": report['timestamp']}
-
-    summary = {
-        "total_personnel": total_personnel,
-        "on_duty": on_duty,
-        "away_personnel": away_personnel,
-        "submission_status": submission_status,
-        "department": user_dept
-    }
     return {"status": "success", "summary": summary}
 
 def handle_list_users(payload, conn, cursor):
@@ -390,7 +359,6 @@ class APIHandler(BaseHTTPRequestHandler):
         "login": {"handler": handle_login, "auth_required": False},
         "logout": {"handler": handle_logout, "auth_required": True},
         "get_dashboard_summary": {"handler": handle_get_dashboard_summary, "auth_required": True, "admin_only": True},
-        "get_user_dashboard_summary": {"handler": handle_get_user_dashboard_summary, "auth_required": True},
         "list_users": {"handler": handle_list_users, "auth_required": True, "admin_only": True},
         "add_user": {"handler": handle_add_user, "auth_required": True, "admin_only": True},
         "update_user": {"handler": handle_update_user, "auth_required": True, "admin_only": True},
@@ -410,31 +378,19 @@ class APIHandler(BaseHTTPRequestHandler):
     }
 
     def _serve_static_file(self):
-        parsed_path = urlparse(self.path)
-        request_path = parsed_path.path
-
         path_map = {'/': '/login.html', '/main': '/main.html'}
-        path = path_map.get(request_path, request_path)
-        
+        path = path_map.get(self.path, self.path)
         filepath = path.lstrip('/')
-        
-        if not os.path.exists(filepath):
-            self.send_error(404, "File not found")
-            return
-        
+        if not os.path.exists(filepath): self.send_error(404, "File not found"); return
         mimetypes = {'.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css'}
         mimetype = mimetypes.get(os.path.splitext(filepath)[1], 'application/octet-stream')
         self.send_response(200); self.send_header('Content-type', mimetype); self.end_headers()
         with open(filepath, 'rb') as f: self.wfile.write(f.read())
 
-    def do_GET(self):
-        self._serve_static_file()
-
+    def do_GET(self): self._serve_static_file()
     def do_POST(self):
-        if self.path == "/api":
-            self._handle_api_request()
-        else:
-            self.send_error(404, "Endpoint not found")
+        if self.path == "/api": self._handle_api_request()
+        else: self.send_error(404, "Endpoint not found")
 
     def _send_json_response(self, data, status_code=200, headers=None):
         self.send_response(status_code); self.send_header('Content-type', 'application/json')
@@ -480,7 +436,7 @@ class APIHandler(BaseHTTPRequestHandler):
             try:
                 handler_kwargs = {"payload": payload, "conn": conn, "cursor": cursor}
                 if action_name == "login": handler_kwargs["client_address"] = self.client_address
-                if session:
+                if session and action_name in ["logout", "list_personnel", "submit_status_report", "get_submission_history"]:
                     handler_kwargs["session"] = session
 
                 response_data = action_config["handler"](**handler_kwargs)

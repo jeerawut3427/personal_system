@@ -68,41 +68,6 @@ export function populateRankDropdowns() {
     });
 }
 
-export function renderUserDashboard(res) {
-    const summary = res.summary;
-    if (!summary) return;
-
-    document.getElementById('user-dashboard-dept').textContent = escapeHTML(summary.department);
-    document.getElementById('user-dashboard-total').textContent = summary.total_personnel;
-    document.getElementById('user-dashboard-on-duty').textContent = summary.on_duty;
-    document.getElementById('user-dashboard-away').textContent = summary.away_personnel.length;
-
-    const statusEl = document.getElementById('user-dashboard-submission-status');
-    if (summary.submission_status.submitted) {
-        const timestamp = new Date(summary.submission_status.timestamp).toLocaleString('th-TH');
-        statusEl.innerHTML = `<div class="p-3 rounded-lg border bg-green-100 border-green-300 text-green-800">ส่งรายงานแล้วเมื่อ ${timestamp} น.</div>`;
-    } else {
-        statusEl.innerHTML = `<div class="p-3 rounded-lg border bg-red-100 border-red-300 text-red-800">ยังไม่ได้ส่งรายงานสำหรับรอบนี้</div>`;
-    }
-
-    const awayListEl = document.getElementById('user-dashboard-away-list');
-    awayListEl.innerHTML = '';
-    if (summary.away_personnel.length > 0) {
-        summary.away_personnel.forEach(item => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="px-4 py-2">${escapeHTML(item.personnel_name)}</td>
-                <td class="px-4 py-2">${escapeHTML(item.status)}</td>
-                <td class="px-4 py-2">${escapeHTML(item.details)}</td>
-                <td class="px-4 py-2">${formatThaiDateRangeArabic(item.start_date, item.end_date)}</td>
-            `;
-            awayListEl.appendChild(row);
-        });
-    } else {
-        awayListEl.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">ไม่มีผู้ที่ไม่มาปฏิบัติงาน</td></tr>';
-    }
-}
-
 export function renderDashboard(res) {
     const summary = res.summary;
     if (!summary) return;
@@ -500,33 +465,4 @@ export function openUserModal(user = null) {
         usernameInput.classList.remove('bg-gray-200');
     }
     window.userModal.classList.add('active');
-}
-
-export function showCustomConfirm(title, message, onConfirm) {
-    const modal = document.getElementById('custom-confirm-modal');
-    const titleEl = document.getElementById('custom-confirm-title');
-    const messageEl = document.getElementById('custom-confirm-message');
-    const okBtn = document.getElementById('custom-confirm-ok-btn');
-    const cancelBtn = document.getElementById('custom-confirm-cancel-btn');
-
-    titleEl.textContent = title;
-    messageEl.textContent = message;
-
-    // Clone and replace buttons to remove old event listeners
-    const newOkBtn = okBtn.cloneNode(true);
-    okBtn.parentNode.replaceChild(newOkBtn, okBtn);
-    
-    const newCancelBtn = cancelBtn.cloneNode(true);
-    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
-
-    newOkBtn.addEventListener('click', () => {
-        modal.classList.remove('active');
-        onConfirm();
-    });
-
-    newCancelBtn.addEventListener('click', () => {
-        modal.classList.remove('active');
-    });
-
-    modal.classList.add('active');
 }
