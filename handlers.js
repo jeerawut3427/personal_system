@@ -2,10 +2,8 @@
 // Contains all event handler functions.
 
 import { sendRequest } from './api.js';
-import { showMessage, openPersonnelModal, openUserModal, renderArchivedReports } from './ui.js';
+import { showMessage, openPersonnelModal, openUserModal, showCustomConfirm } from './ui.js';
 import { exportSingleReportToExcel, formatThaiDateArabic, formatThaiDateRangeArabic, escapeHTML } from './utils.js';
-
-// All functions access global variables and DOM via the window object
 
 export async function handlePersonnelFormSubmit(e) {
     e.preventDefault();
@@ -24,7 +22,7 @@ export async function handlePersonnelFormSubmit(e) {
         const response = await sendRequest(action, { data });
         if (response.status === 'success') {
             window.personnelModal.classList.remove('active');
-            window.loadDataForPane('pane-personnel'); // Reload data to reflect changes
+            window.loadDataForPane('pane-personnel');
         }
         showMessage(response.message, response.status === 'success');
     } catch (error) {
@@ -37,23 +35,27 @@ export async function handlePersonnelListClick(e) {
     const personId = target.dataset.id;
     if (!personId) return;
 
-    try {
-        if (target.classList.contains('delete-person-btn')) {
-            if (confirm('คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลนี้?')) {
+    if (target.classList.contains('delete-person-btn')) {
+        showCustomConfirm('ยืนยันการลบ', 'คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลกำลังพลนี้?', async () => {
+            try {
                 const response = await sendRequest('delete_personnel', { id: personId });
                 if (response.status === 'success') window.loadDataForPane('pane-personnel');
                 showMessage(response.message, response.status === 'success');
+            } catch(error) {
+                showMessage(error.message, false);
             }
-        } else if (target.classList.contains('edit-person-btn')) {
-             const res = await sendRequest('get_personnel_details', { id: personId });
-             if (res.status === 'success' && res.personnel) {
-                openPersonnelModal(res.personnel);
-             } else {
-                showMessage(res.message || 'ไม่พบข้อมูลกำลังพลที่ต้องการแก้ไข', false);
-             }
+        });
+    } else if (target.classList.contains('edit-person-btn')) {
+        try {
+            const res = await sendRequest('get_personnel_details', { id: personId });
+            if (res.status === 'success' && res.personnel) {
+               openPersonnelModal(res.personnel);
+            } else {
+               showMessage(res.message || 'ไม่พบข้อมูลกำลังพลที่ต้องการแก้ไข', false);
+            }
+        } catch(error) {
+            showMessage(error.message, false);
         }
-    } catch(error) {
-        showMessage(error.message, false);
     }
 }
 
@@ -90,23 +92,27 @@ export async function handleUserListClick(e) {
     const username = target.dataset.username;
     if (!username) return;
 
-    try {
-        if (target.classList.contains('delete-user-btn')) {
-            if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบผู้ใช้ '${username}'?`)) {
+    if (target.classList.contains('delete-user-btn')) {
+        showCustomConfirm('ยืนยันการลบ', `คุณแน่ใจหรือไม่ว่าต้องการลบผู้ใช้ '${username}'?`, async () => {
+            try {
                 const response = await sendRequest('delete_user', { username: username });
                 if (response.status === 'success') window.loadDataForPane('pane-admin');
                 showMessage(response.message, response.status === 'success');
+            } catch(error) {
+                showMessage(error.message, false);
             }
-        } else if (target.classList.contains('edit-user-btn')) {
+        });
+    } else if (target.classList.contains('edit-user-btn')) {
+        try {
             const res = await sendRequest('list_users', { page: 1, searchTerm: '' }); // Fetch all for editing
             if (res.status === 'success') {
                 const userToEdit = res.users.find(u => u.username === username);
                 if (userToEdit) openUserModal(userToEdit);
                 else showMessage('ไม่พบข้อมูลผู้ใช้ที่ต้องการแก้ไข', false);
             }
+        } catch(error) {
+            showMessage(error.message, false);
         }
-    } catch(error) {
-        showMessage(error.message, false);
     }
 }
 
@@ -246,14 +252,22 @@ export async function handleSubmitStatusReport() {
     }
 }
 
-export async function handleExportAndArchive() {
-    const weekRangeText = document.getElementById('report-week-range')?.textContent || '';
+export async function handleExportAndArchive(weekRangeText) {
+    const fileNameInput = document.getElementById('export-filename-input');
+    let fileName = `รายงานกำลังพล-${new Date().toISOString().split('T')[0]}.xlsx`; // Default name
+    if (fileNameInput && fileNameInput.value.trim()) {
+        fileName = fileNameInput.value.trim();
+        if (!fileName.toLowerCase().endsWith('.xlsx')) {
+            fileName += '.xlsx';
+        }
+    }
+
     window.archiveConfirmModal.classList.remove('active');
     if (!window.currentWeeklyReports || window.currentWeeklyReports.length === 0) {
         showMessage('ไม่มีข้อมูลรายงานที่จะส่งออก', false);
         return;
     }
-    exportSingleReportToExcel(window.currentWeeklyReports, `รายงานกำลังพล-${new Date().toISOString().split('T')[0]}.xlsx`, weekRangeText);
+    exportSingleReportToExcel(window.currentWeeklyReports, fileName, weekRangeText);
     try {
         const response = await sendRequest('archive_reports', { reports: window.currentWeeklyReports });
         showMessage(response.message, response.status === 'success');
