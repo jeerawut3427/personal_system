@@ -166,6 +166,36 @@ def handle_get_dashboard_summary(payload, conn, cursor):
     summary = {"all_departments": all_departments, "submitted_info": submitted_info, "status_summary": dict(status_summary), "total_personnel": total_personnel, "total_on_duty": total_on_duty, "weekly_date_range": get_next_week_range_str()}
     return {"status": "success", "summary": summary}
 
+def handle_get_user_dashboard_summary(payload, conn, cursor, session):
+    user_dept = session.get("department")
+    if not user_dept:
+        return {"status": "error", "message": "ไม่พบข้อมูลแผนก"}
+
+    cursor.execute("SELECT COUNT(*) as total FROM personnel WHERE department = ?", (user_dept,))
+    total_personnel = cursor.fetchone()['total']
+
+    cursor.execute("SELECT report_data, timestamp FROM status_reports WHERE department = ? ORDER BY timestamp DESC LIMIT 1", (user_dept,))
+    report = cursor.fetchone()
+    
+    away_personnel = []
+    on_duty = total_personnel
+    submission_status = {"submitted": False, "timestamp": None}
+
+    if report:
+        items = json.loads(report['report_data'])
+        on_duty = total_personnel - len(items)
+        away_personnel = items
+        submission_status = {"submitted": True, "timestamp": report['timestamp']}
+
+    summary = {
+        "total_personnel": total_personnel,
+        "on_duty": on_duty,
+        "away_personnel": away_personnel,
+        "submission_status": submission_status,
+        "department": user_dept
+    }
+    return {"status": "success", "summary": summary}
+
 def handle_list_users(payload, conn, cursor):
     page = payload.get("page", 1)
     search_term = payload.get("searchTerm", "").strip()
