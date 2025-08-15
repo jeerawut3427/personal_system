@@ -14,6 +14,7 @@ from collections import defaultdict
 import time
 import re
 from email.utils import formatdate
+from urllib.parse import urlparse
 
 # --- Database Setup ---
 DB_FILE = "database.db"
@@ -359,6 +360,7 @@ class APIHandler(BaseHTTPRequestHandler):
         "login": {"handler": handle_login, "auth_required": False},
         "logout": {"handler": handle_logout, "auth_required": True},
         "get_dashboard_summary": {"handler": handle_get_dashboard_summary, "auth_required": True, "admin_only": True},
+        "get_user_dashboard_summary": {"handler": handle_get_user_dashboard_summary, "auth_required": True},
         "list_users": {"handler": handle_list_users, "auth_required": True, "admin_only": True},
         "add_user": {"handler": handle_add_user, "auth_required": True, "admin_only": True},
         "update_user": {"handler": handle_update_user, "auth_required": True, "admin_only": True},
@@ -378,19 +380,31 @@ class APIHandler(BaseHTTPRequestHandler):
     }
 
     def _serve_static_file(self):
+        parsed_path = urlparse(self.path)
+        request_path = parsed_path.path
+
         path_map = {'/': '/login.html', '/main': '/main.html'}
-        path = path_map.get(self.path, self.path)
+        path = path_map.get(request_path, request_path)
+        
         filepath = path.lstrip('/')
-        if not os.path.exists(filepath): self.send_error(404, "File not found"); return
+        
+        if not os.path.exists(filepath):
+            self.send_error(404, "File not found")
+            return
+        
         mimetypes = {'.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css'}
         mimetype = mimetypes.get(os.path.splitext(filepath)[1], 'application/octet-stream')
         self.send_response(200); self.send_header('Content-type', mimetype); self.end_headers()
         with open(filepath, 'rb') as f: self.wfile.write(f.read())
 
-    def do_GET(self): self._serve_static_file()
+    def do_GET(self):
+        self._serve_static_file()
+
     def do_POST(self):
-        if self.path == "/api": self._handle_api_request()
-        else: self.send_error(404, "Endpoint not found")
+        if self.path == "/api":
+            self._handle_api_request()
+        else:
+            self.send_error(404, "Endpoint not found")
 
     def _send_json_response(self, data, status_code=200, headers=None):
         self.send_response(status_code); self.send_header('Content-type', 'application/json')
@@ -436,7 +450,7 @@ class APIHandler(BaseHTTPRequestHandler):
             try:
                 handler_kwargs = {"payload": payload, "conn": conn, "cursor": cursor}
                 if action_name == "login": handler_kwargs["client_address"] = self.client_address
-                if session and action_name in ["logout", "list_personnel", "submit_status_report", "get_submission_history"]:
+                if session:
                     handler_kwargs["session"] = session
 
                 response_data = action_config["handler"](**handler_kwargs)
