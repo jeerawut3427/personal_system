@@ -10,6 +10,7 @@ import { escapeHTML } from './utils.js';
 window.currentUser = null;
 window.currentWeeklyReports = [];
 window.allArchivedReports = {};
+window.allHistoryData = {};
 window.personnelCurrentPage = 1;
 window.userCurrentPage = 1;
 
@@ -77,6 +78,10 @@ window.personnelSearchBtn = null;
 window.userSearchInput = null;
 window.userSearchBtn = null;
 window.historyContainer = null;
+window.historyYearSelect = null;
+window.historyMonthSelect = null;
+window.showHistoryBtn = null;
+window.activeStatusesContainer = null;
 
 // --- Main Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -140,6 +145,10 @@ function assignDomElements() {
     window.userSearchInput = document.getElementById('user-search-input');
     window.userSearchBtn = document.getElementById('user-search-btn');
     window.historyContainer = document.getElementById('history-container');
+    window.historyYearSelect = document.getElementById('history-year-select');
+    window.historyMonthSelect = document.getElementById('history-month-select');
+    window.showHistoryBtn = document.getElementById('show-history-btn');
+    window.activeStatusesContainer = document.getElementById('active-statuses-container');
 }
 
 function initializePage() {
@@ -149,6 +158,7 @@ function initializePage() {
 
     const is_admin = (userRole === 'admin');
     document.getElementById('tab-dashboard').classList.toggle('hidden', !is_admin);
+    document.getElementById('tab-active-statuses').classList.remove('hidden');
     document.getElementById('tab-submit-status').classList.remove('hidden');
     document.getElementById('tab-history').classList.remove('hidden');
     document.getElementById('tab-report').classList.toggle('hidden', !is_admin);
@@ -159,7 +169,7 @@ function initializePage() {
     if (is_admin) {
         switchTab('tab-dashboard');
     } else {
-        switchTab('tab-submit-status');
+        switchTab('tab-active-statuses');
     }
 
     logoutBtn.addEventListener('click', () => performLogout());
@@ -231,7 +241,41 @@ function initializePage() {
             }
         });
     }
+
+    if (showHistoryBtn) showHistoryBtn.addEventListener('click', handlers.handleShowHistory);
+    
+    if (historyYearSelect) {
+        historyYearSelect.addEventListener('change', () => {
+            const selectedYear = historyYearSelect.value;
+            historyMonthSelect.innerHTML = '<option value="">เลือกเดือน</option>';
+            if (selectedYear && window.allHistoryData[selectedYear]) {
+                const sortedMonths = Object.keys(window.allHistoryData[selectedYear]).sort((a, b) => b - a);
+                sortedMonths.forEach(month => {
+                    const option = document.createElement('option');
+                    option.value = month;
+                    option.textContent = new Date(2000, parseInt(month) - 1, 1).toLocaleString('th-TH', { month: 'long' });
+                    historyMonthSelect.appendChild(option);
+                });
+            }
+        });
+    }
+
     if(historyContainer) historyContainer.addEventListener('click', handlers.handleHistoryEditClick);
+    if(reportContainer) reportContainer.addEventListener('click', handlers.handleWeeklyReportEditClick);
+
+    if (statusSubmissionListArea) {
+        statusSubmissionListArea.addEventListener('click', function(e) {
+            if (e.target && e.target.classList.contains('add-status-btn')) {
+                ui.addStatusRow(e.target);
+            }
+            if (e.target && e.target.classList.contains('remove-status-btn')) {
+                const subRow = e.target.closest('tr');
+                if (subRow) {
+                    subRow.remove();
+                }
+            }
+        });
+    }
 }
 
 // --- Data Loading and Tab Switching ---
@@ -239,6 +283,7 @@ window.loadDataForPane = async function(paneId) {
     let payload = {};
     const actions = {
         'pane-dashboard': { action: 'get_dashboard_summary', renderer: ui.renderDashboard },
+        'pane-active-statuses': { action: 'get_active_statuses', renderer: ui.renderActiveStatuses },
         'pane-personnel': { action: 'list_personnel', renderer: ui.renderPersonnel, searchInput: personnelSearchInput, pageState: 'personnelCurrentPage' },
         'pane-admin': { action: 'list_users', renderer: ui.renderUsers, searchInput: userSearchInput, pageState: 'userCurrentPage' },
         'pane-submit-status': { action: 'list_personnel', renderer: ui.renderStatusSubmissionForm, fetchAll: true },
@@ -263,6 +308,14 @@ window.loadDataForPane = async function(paneId) {
     }
     if (paneConfig.fetchAll) {
         payload.fetchAll = true;
+    }
+
+    // [แก้ไข] ส่งชื่อแผนกที่ Admin เลือกไปกับ Request
+    if (paneId === 'pane-submit-status' && window.currentUser.role === 'admin') {
+        const deptSelector = document.getElementById('admin-dept-selector');
+        if (deptSelector && deptSelector.value) {
+            payload.department = deptSelector.value;
+        }
     }
 
     try {

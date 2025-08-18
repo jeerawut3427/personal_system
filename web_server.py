@@ -37,7 +37,7 @@ def get_thai_public_holidays(year):
 
 def get_next_week_range_str():
     today = date.today()
-    all_holidays = get_thai_public_holidays(2025).union(get_thai_public_holidays(2026))
+    all_holidays = get_thai_public_holidays(today.year).union(get_thai_public_holidays(today.year + 1))
     working_days = []
     current_day = today - timedelta(days=today.weekday()) + timedelta(weeks=1)
     while len(working_days) < 5:
@@ -45,6 +45,7 @@ def get_next_week_range_str():
             working_days.append(current_day)
         current_day += timedelta(days=1)
     if not working_days: return ""
+    
     thai_months_abbr = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
     groups, parts = [], []
     if working_days:
@@ -53,37 +54,62 @@ def get_next_week_range_str():
             if working_days[i] == working_days[i-1] + timedelta(days=1):
                 current_group.append(working_days[i])
             else:
-                groups.append(current_group); current_group = [working_days[i]]
+                groups.append(current_group)
+                current_group = [working_days[i]]
         groups.append(current_group)
+
     for group in groups:
         start_date, end_date = group[0], group[-1]
-        start_day, start_month, start_year = start_date.day, thai_months_abbr[start_date.month - 1], str(start_date.year + 543)[-2:]
-        end_day, end_month, end_year = end_date.day, thai_months_abbr[end_date.month - 1], str(end_date.year + 543)[-2:]
-        if len(group) == 1: parts.append(f"{start_day} {start_month}{start_year}")
+        start_day, start_month, start_year = start_date.day, thai_months_abbr[start_date.month - 1], str(start_date.year + 543)
+        end_day, end_month, end_year = end_date.day, thai_months_abbr[end_date.month - 1], str(end_date.year + 543)
+        if len(group) == 1: 
+            parts.append(f"{start_day} {start_month} {start_year}")
         else:
-            if start_year != end_year: parts.append(f"{start_day} {start_month}{start_year} - {end_day} {end_month}{end_year}")
-            elif start_month != end_month: parts.append(f"{start_day} {start_month}- {end_day} {end_month}{end_year}")
-            else: parts.append(f"{start_day}-{end_day} {start_month}{end_year}")
+            if start_year != end_year: 
+                parts.append(f"{start_day} {start_month} {start_year} - {end_day} {end_month} {end_year}")
+            elif start_month != end_month: 
+                parts.append(f"{start_day} {start_month} - {end_day} {end_month} {end_year}")
+            else: 
+                parts.append(f"{start_day}-{end_day} {start_month} {end_year}")
     return " และ ".join(parts)
 
 # --- Database Functions ---
 def get_db_connection():
-    conn = sqlite3.connect(DB_FILE); conn.row_factory = sqlite3.Row; return conn
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def init_db():
-    conn = get_db_connection(); cursor = conn.cursor()
+    conn = get_db_connection()
+    cursor = conn.cursor()
     cursor.execute('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, salt BLOB NOT NULL, key BLOB NOT NULL, rank TEXT, first_name TEXT, last_name TEXT, position TEXT, department TEXT, role TEXT NOT NULL)')
     cursor.execute('CREATE TABLE IF NOT EXISTS personnel (id TEXT PRIMARY KEY, rank TEXT, first_name TEXT, last_name TEXT, position TEXT, specialty TEXT, department TEXT)')
     cursor.execute('CREATE TABLE IF NOT EXISTS status_reports (id TEXT PRIMARY KEY, date TEXT NOT NULL, submitted_by TEXT, department TEXT, timestamp DATETIME, report_data TEXT)')
     cursor.execute('CREATE TABLE IF NOT EXISTS archived_reports (id TEXT PRIMARY KEY, year INTEGER NOT NULL, month INTEGER NOT NULL, date TEXT NOT NULL, department TEXT, submitted_by TEXT, report_data TEXT, timestamp DATETIME)')
     cursor.execute('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, username TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (username) REFERENCES users (username) ON DELETE CASCADE)')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS persistent_statuses (
+            id TEXT PRIMARY KEY,
+            personnel_id TEXT NOT NULL,
+            department TEXT NOT NULL,
+            status TEXT,
+            details TEXT,
+            start_date TEXT,
+            end_date TEXT,
+            FOREIGN KEY (personnel_id) REFERENCES personnel (id) ON DELETE CASCADE
+        )
+    ''')
+
     cursor.execute("SELECT * FROM users WHERE username = ?", ('jeerawut',))
     if not cursor.fetchone():
         print("กำลังสร้างผู้ดูแลระบบ 'jeerawut'...")
         salt, key = hash_password("Jee@wut2534")
         cursor.execute("INSERT INTO users (username, salt, key, rank, first_name, last_name, position, department, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                        ('jeerawut', salt, key, 'น.อ.', 'จีราวุฒิ', 'ผู้ดูแลระบบ', 'ผู้ดูแลระบบ', 'ส่วนกลาง', 'admin'))
-    conn.commit(); conn.close(); print("ฐานข้อมูล SQLite พร้อมใช้งาน")
+    conn.commit()
+    conn.close()
+    print("ฐานข้อมูล SQLite พร้อมใช้งาน")
 
 # --- Security Functions ---
 def hash_password(password, salt=None):
@@ -122,12 +148,8 @@ def handle_login(payload, conn, cursor, client_address):
         user_info = {k: user_data[k] for k in user_data.keys() if k not in ['salt', 'key']}
         expires_time = time.time() + SESSION_TIMEOUT_SECONDS
         cookie_attrs = [
-            f'session_token={session_token}',
-            'HttpOnly',
-            'Path=/',
-            'SameSite=Strict',
-            f'Max-Age={SESSION_TIMEOUT_SECONDS}',
-            f'Expires={formatdate(expires_time, usegmt=True)}'
+            f'session_token={session_token}', 'HttpOnly', 'Path=/', 'SameSite=Strict',
+            f'Max-Age={SESSION_TIMEOUT_SECONDS}', f'Expires={formatdate(expires_time, usegmt=True)}'
         ]
         headers = [('Set-Cookie', '; '.join(cookie_attrs))]
         return {"status": "success", "user": user_info}, headers
@@ -225,28 +247,56 @@ def handle_list_personnel(payload, conn, cursor, session):
     base_query = " FROM personnel"
     params, where_clauses = [], []
     is_admin, department = session.get("role") == "admin", session.get("department")
+    
     if not is_admin:
         where_clauses.append("department = ?"); params.append(department)
+
     if search_term:
         where_clauses.append("(first_name LIKE ? OR last_name LIKE ? OR position LIKE ?)")
         params.extend([f"%{search_term}%"] * 3)
     where_clause_str = ""
     if where_clauses: where_clause_str = " WHERE " + " AND ".join(where_clauses)
+    
     count_query = "SELECT COUNT(*) as total" + base_query + where_clause_str
     cursor.execute(count_query, params)
     total_items = cursor.fetchone()['total']
+    
     data_query = "SELECT *" + base_query + where_clause_str
     if not fetch_all:
         data_query += " LIMIT ? OFFSET ?"
         params.extend([ITEMS_PER_PAGE, offset])
     cursor.execute(data_query, params)
     personnel = [{k: escape(str(v)) if v is not None else '' for k, v in dict(row).items()} for row in cursor.fetchall()]
+    
     submission_status = None
     if not is_admin:
-        cursor.execute("SELECT timestamp FROM status_reports WHERE department = ? ORDER BY timestamp DESC LIMIT 1", (session.get("department"),))
+        cursor.execute("SELECT timestamp FROM status_reports WHERE department = ? ORDER BY timestamp DESC LIMIT 1", (department,))
         last_submission = cursor.fetchone()
         if last_submission: submission_status = {"timestamp": last_submission['timestamp']}
-    return {"status": "success", "personnel": personnel, "total": total_items, "page": page, "submission_status": submission_status, "weekly_date_range": get_next_week_range_str()}
+
+    persistent_statuses = []
+    if fetch_all:
+        today_str = date.today().isoformat()
+        if is_admin:
+            query = "SELECT personnel_id, department, status, details, start_date, end_date FROM persistent_statuses WHERE end_date >= ?"
+            params_status = [today_str]
+        else:
+            query = "SELECT personnel_id, department, status, details, start_date, end_date FROM persistent_statuses WHERE end_date >= ? AND department = ?"
+            params_status = [today_str, department]
+        
+        cursor.execute(query, params_status)
+        persistent_statuses = [dict(row) for row in cursor.fetchall()]
+
+    return {
+        "status": "success", 
+        "personnel": personnel, 
+        "total": total_items, 
+        "page": page, 
+        "submission_status": submission_status, 
+        "weekly_date_range": get_next_week_range_str(),
+        "persistent_statuses": persistent_statuses
+    }
+
 
 def handle_get_personnel_details(payload, conn, cursor):
     person_id = payload.get("id")
@@ -292,19 +342,58 @@ def handle_submit_status_report(payload, conn, cursor, session):
     report_data = payload.get("report", {})
     submitted_by = session.get("username")
     user_department = report_data.get("department", session.get("department"))
-    timestamp_str = (datetime.utcnow() + timedelta(hours=7)).strftime('%Y-%m-%d %H:%M:%S')
+    server_now = datetime.utcnow() + timedelta(hours=7)
+    date_str = server_now.strftime('%Y-%m-%d')
+    timestamp_str = server_now.strftime('%Y-%m-%d %H:%M:%S')
+    
     cursor.execute("DELETE FROM status_reports WHERE department = ?", (user_department,))
     cursor.execute("INSERT INTO status_reports (id, date, submitted_by, department, report_data, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
-                   (str(uuid.uuid4()), report_data["date"], submitted_by, user_department, json.dumps(report_data["items"]), timestamp_str))
+                   (str(uuid.uuid4()), date_str, submitted_by, user_department, json.dumps(report_data["items"]), timestamp_str))
+    
+    today_str = date.today().isoformat()
+    cursor.execute("DELETE FROM persistent_statuses WHERE department = ?", (user_department,))
+    
+    for item in report_data.get("items", []):
+        if item.get("status") != "ไม่มี" and item.get("end_date", "") >= today_str:
+            cursor.execute(
+                """INSERT INTO persistent_statuses 
+                   (id, personnel_id, department, status, details, start_date, end_date) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    str(uuid.uuid4()),
+                    item["personnel_id"],
+                    user_department,
+                    item["status"],
+                    item["details"],
+                    item["start_date"],
+                    item["end_date"],
+                )
+            )
+    
     conn.commit()
     return {"status": "success", "message": "ส่งยอดกำลังพลสำเร็จ"}
 
 def handle_get_status_reports(payload, conn, cursor):
     cursor.execute("SELECT sr.id, sr.date, sr.department, sr.timestamp, sr.report_data, u.rank, u.first_name, u.last_name FROM status_reports sr JOIN users u ON sr.submitted_by = u.username ORDER BY sr.timestamp DESC")
     reports = []
+    submitted_departments = set()
     for row in cursor.fetchall():
-        report = dict(row); report["items"] = json.loads(report["report_data"]); del report["report_data"]; reports.append(report)
-    return {"status": "success", "reports": reports, "weekly_date_range": get_next_week_range_str()}
+        report = dict(row)
+        report["items"] = json.loads(report["report_data"])
+        del report["report_data"]
+        reports.append(report)
+        submitted_departments.add(report['department'])
+
+    cursor.execute("SELECT DISTINCT department FROM personnel WHERE department IS NOT NULL AND department != ''")
+    all_departments = [row['department'] for row in cursor.fetchall()]
+
+    return {
+        "status": "success", 
+        "reports": reports, 
+        "weekly_date_range": get_next_week_range_str(),
+        "all_departments": all_departments,
+        "submitted_departments": list(submitted_departments)
+    }
 
 def handle_archive_reports(payload, conn, cursor):
     for report in payload.get("reports", []):
@@ -323,7 +412,9 @@ def handle_get_archived_reports(payload, conn, cursor):
     cursor.execute("SELECT * FROM archived_reports ORDER BY year DESC, month DESC, date DESC")
     archives = defaultdict(lambda: defaultdict(list))
     for row in cursor.fetchall():
-        report = dict(row); report["items"] = json.loads(report["report_data"]); del report["report_data"]
+        report = dict(row)
+        report["items"] = json.loads(report["report_data"])
+        del report["report_data"]
         archives[str(report["year"])][str(report["month"])].append(report)
     return {"status": "success", "archives": dict(archives)}
 
@@ -339,19 +430,60 @@ def handle_get_submission_history(payload, conn, cursor, session):
     ORDER BY timestamp DESC
     """
     cursor.execute(query, {"dept": user_dept})
-    history = []
+    
+    history_by_month = defaultdict(lambda: defaultdict(list))
+    
     for row in cursor.fetchall():
-        report = dict(row); report["items"] = json.loads(report["report_data"]); del report["report_data"]; history.append(report)
-    return {"status": "success", "history": history}
+        report = dict(row)
+        report["items"] = json.loads(report["report_data"])
+        del report["report_data"]
+        
+        timestamp_dt = datetime.strptime(report["timestamp"].split('.')[0], '%Y-%m-%d %H:%M:%S')
+        year_be = str(timestamp_dt.year + 543)
+        month = str(timestamp_dt.month)
+        
+        history_by_month[year_be][month].append(report)
+        
+    return {"status": "success", "history": dict(history_by_month)}
 
 def handle_get_report_for_editing(payload, conn, cursor):
     report_id = payload.get("id")
     if not report_id: return {"status": "error", "message": "ไม่พบ ID ของรายงาน"}
     cursor.execute("SELECT report_data, department FROM status_reports WHERE id = ?", (report_id,))
     report = cursor.fetchone()
-    if not report: cursor.execute("SELECT report_data, department FROM archived_reports WHERE id = ?", (report_id,)); report = cursor.fetchone()
-    if report: return {"status": "success", "report": {"items": json.loads(report['report_data']), "department": report['department']}}
+    if not report: 
+        cursor.execute("SELECT report_data, department FROM archived_reports WHERE id = ?", (report_id,))
+        report = cursor.fetchone()
+    if report: 
+        return {"status": "success", "report": {"items": json.loads(report['report_data']), "department": report['department']}}
     return {"status": "error", "message": "ไม่พบข้อมูลรายงาน"}
+
+def handle_get_active_statuses(payload, conn, cursor, session):
+    today_str = date.today().isoformat()
+    is_admin = session.get("role") == "admin"
+    department = session.get("department")
+
+    query = """
+        SELECT 
+            ps.status, ps.details, ps.start_date, ps.end_date,
+            p.rank, p.first_name, p.last_name, p.department
+        FROM persistent_statuses ps
+        JOIN personnel p ON ps.personnel_id = p.id
+        WHERE ps.end_date >= ?
+    """
+    params = [today_str]
+
+    if not is_admin:
+        query += " AND ps.department = ?"
+        params.append(department)
+    
+    query += " ORDER BY ps.end_date ASC"
+    
+    cursor.execute(query, params)
+    
+    statuses = [dict(row) for row in cursor.fetchall()]
+    return {"status": "success", "active_statuses": statuses}
+
 
 # --- HTTP Request Handler ---
 class APIHandler(BaseHTTPRequestHandler):
@@ -375,27 +507,39 @@ class APIHandler(BaseHTTPRequestHandler):
         "get_archived_reports": {"handler": handle_get_archived_reports, "auth_required": True, "admin_only": True},
         "get_submission_history": {"handler": handle_get_submission_history, "auth_required": True},
         "get_report_for_editing": {"handler": handle_get_report_for_editing, "auth_required": True},
+        "get_active_statuses": {"handler": handle_get_active_statuses, "auth_required": True},
     }
 
     def _serve_static_file(self):
         path_map = {'/': '/login.html', '/main': '/main.html'}
         path = path_map.get(self.path, self.path)
         filepath = path.lstrip('/')
-        if not os.path.exists(filepath): self.send_error(404, "File not found"); return
+        if not os.path.exists(filepath): 
+            self.send_error(404, "File not found")
+            return
         mimetypes = {'.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css'}
         mimetype = mimetypes.get(os.path.splitext(filepath)[1], 'application/octet-stream')
-        self.send_response(200); self.send_header('Content-type', mimetype); self.end_headers()
-        with open(filepath, 'rb') as f: self.wfile.write(f.read())
+        self.send_response(200)
+        self.send_header('Content-type', mimetype)
+        self.end_headers()
+        with open(filepath, 'rb') as f: 
+            self.wfile.write(f.read())
 
-    def do_GET(self): self._serve_static_file()
+    def do_GET(self): 
+        self._serve_static_file()
+
     def do_POST(self):
-        if self.path == "/api": self._handle_api_request()
-        else: self.send_error(404, "Endpoint not found")
+        if self.path == "/api": 
+            self._handle_api_request()
+        else: 
+            self.send_error(404, "Endpoint not found")
 
     def _send_json_response(self, data, status_code=200, headers=None):
-        self.send_response(status_code); self.send_header('Content-type', 'application/json')
+        self.send_response(status_code)
+        self.send_header('Content-type', 'application/json')
         if headers:
-            for key, value in headers: self.send_header(key, value)
+            for key, value in headers: 
+                self.send_header(key, value)
         self.end_headers()
         self.wfile.write(json.dumps(data).encode('utf-8'))
 
@@ -406,7 +550,8 @@ class APIHandler(BaseHTTPRequestHandler):
         session_token = cookies.get('session_token')
         if not session_token: return None
         
-        conn = get_db_connection(); cursor = conn.cursor()
+        conn = get_db_connection()
+        cursor = conn.cursor()
         
         expiry_limit = datetime.now() - timedelta(seconds=SESSION_TIMEOUT_SECONDS)
         cursor.execute("DELETE FROM sessions WHERE created_at < ?", (expiry_limit,))
@@ -417,7 +562,9 @@ class APIHandler(BaseHTTPRequestHandler):
         conn.close()
         
         if session_data:
-            session_dict = dict(session_data); session_dict['token'] = session_token; return session_dict
+            session_dict = dict(session_data)
+            session_dict['token'] = session_token
+            return session_dict
         return None
 
     def _handle_api_request(self):
@@ -428,22 +575,29 @@ class APIHandler(BaseHTTPRequestHandler):
             request_data = json.loads(self.rfile.read(content_length).decode('utf-8'))
             action_name, payload = request_data.get("action"), request_data.get("payload", {})
             action_config = self.ACTION_MAP.get(action_name)
-            if not action_config: return self._send_json_response({"status": "error", "message": "ไม่รู้จักคำสั่งนี้"}, 404)
-            if action_config.get("auth_required") and not session: return self._send_json_response({"status": "error", "message": "Unauthorized"}, 401)
-            if action_config.get("admin_only") and (not session or session.get("role") != "admin"): return self._send_json_response({"status": "error", "message": "คุณไม่มีสิทธิ์ดำเนินการ"}, 403)
+            if not action_config: 
+                return self._send_json_response({"status": "error", "message": "ไม่รู้จักคำสั่งนี้"}, 404)
+            if action_config.get("auth_required") and not session: 
+                return self._send_json_response({"status": "error", "message": "Unauthorized"}, 401)
+            if action_config.get("admin_only") and (not session or session.get("role") != "admin"): 
+                return self._send_json_response({"status": "error", "message": "คุณไม่มีสิทธิ์ดำเนินการ"}, 403)
             
-            conn = get_db_connection(); cursor = conn.cursor()
+            conn = get_db_connection()
+            cursor = conn.cursor()
             try:
                 handler_kwargs = {"payload": payload, "conn": conn, "cursor": cursor}
-                if action_name == "login": handler_kwargs["client_address"] = self.client_address
-                if session and action_name in ["logout", "list_personnel", "submit_status_report", "get_submission_history"]:
+                if action_name == "login": 
+                    handler_kwargs["client_address"] = self.client_address
+                if session and action_name in ["logout", "list_personnel", "submit_status_report", "get_submission_history", "get_active_statuses"]:
                     handler_kwargs["session"] = session
 
                 response_data = action_config["handler"](**handler_kwargs)
                 headers = None
-                if isinstance(response_data, tuple): response_data, headers = response_data
+                if isinstance(response_data, tuple): 
+                    response_data, headers = response_data
                 self._send_json_response(response_data, headers=headers)
-            finally: conn.close()
+            finally: 
+                conn.close()
         except Exception as e:
             print(f"API Error on action '{action_name}': {e}")
             self._send_json_response({"status": "error", "message": "Server error"}, 500)

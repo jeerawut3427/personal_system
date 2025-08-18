@@ -2,7 +2,7 @@
 // Contains all event handler functions.
 
 import { sendRequest } from './api.js';
-import { showMessage, openPersonnelModal, openUserModal, renderArchivedReports } from './ui.js';
+import { showMessage, openPersonnelModal, openUserModal, renderArchivedReports, renderFilteredHistoryReports } from './ui.js';
 import { exportSingleReportToExcel, formatThaiDateArabic, formatThaiDateRangeArabic, escapeHTML } from './utils.js';
 
 // All functions access global variables and DOM via the window object
@@ -145,15 +145,14 @@ export function handleReviewStatus() {
     const reviewItems = [];
     let hasError = false;
 
-    if (rows.length === 0 || !rows[0].querySelector('.status-select')) {
-        window.reviewListArea.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-500">ยืนยันการส่งยอด: กำลังพลมาปฏิบัติงานครบถ้วน</td></tr>`;
-        window.submissionFormSection.classList.add('hidden');
-        window.reviewReportSection.classList.remove('hidden');
+    if (rows.length === 0) {
+        showMessage('ไม่พบข้อมูลกำลังพลที่จะส่ง', false);
         return;
     }
 
     rows.forEach(row => {
         const statusSelect = row.querySelector('.status-select');
+        // Only process rows that have a status selected
         if (statusSelect && statusSelect.value !== 'ไม่มี') {
             const startDate = row.querySelector('.start-date-input').value;
             const endDate = row.querySelector('.end-date-input').value;
@@ -162,9 +161,12 @@ export function handleReviewStatus() {
                 hasError = true; return;
             }
             reviewItems.push({
-                personnel_name: row.dataset.personnelName, status: statusSelect.value,
+                personnel_id: row.dataset.personnelId,
+                personnel_name: row.dataset.personnelName, 
+                status: statusSelect.value,
                 details: row.querySelector('.details-input').value,
-                start_date: startDate, end_date: endDate
+                start_date: startDate, 
+                end_date: endDate
             });
         }
     });
@@ -203,8 +205,10 @@ export async function handleSubmitStatusReport() {
         const statusSelect = row.querySelector('.status-select');
         if (statusSelect && statusSelect.value !== 'ไม่มี') {
             reportItems.push({
-                personnel_id: row.dataset.personnelId, personnel_name: row.dataset.personnelName,
-                status: statusSelect.value, details: row.querySelector('.details-input').value,
+                personnel_id: row.dataset.personnelId, 
+                personnel_name: row.dataset.personnelName,
+                status: statusSelect.value, 
+                details: row.querySelector('.details-input').value,
                 start_date: row.querySelector('.start-date-input').value,
                 end_date: row.querySelector('.end-date-input').value
             });
@@ -220,7 +224,6 @@ export async function handleSubmitStatusReport() {
     }
 
     const report = {
-        date: new Date().toISOString().split('T')[0],
         items: reportItems,
         department: reportDepartment
     };
@@ -306,6 +309,37 @@ export function handleArchiveDownloadClick(e) {
 export async function handleHistoryEditClick(e) {
     const target = e.target;
     if (!target.classList.contains('edit-history-btn')) return;
+
+    const reportId = target.dataset.id;
+    if (!reportId) return;
+
+    try {
+        const res = await sendRequest('get_report_for_editing', { id: reportId });
+        if (res.status === 'success' && res.report) {
+            window.editingReportData = res.report;
+            window.switchTab('tab-submit-status');
+        } else {
+            showMessage(res.message || 'ไม่สามารถดึงข้อมูลมาแก้ไขได้', false);
+        }
+    } catch (error) {
+        showMessage(error.message, false);
+    }
+}
+
+export function handleShowHistory() {
+    const year = window.historyYearSelect.value;
+    const month = window.historyMonthSelect.value;
+    if (!year || !month) {
+        showMessage('กรุณาเลือกปีและเดือน', false);
+        return;
+    }
+    const reportsForMonth = window.allHistoryData[year] ? window.allHistoryData[year][month] : [];
+    renderFilteredHistoryReports(reportsForMonth);
+}
+
+export async function handleWeeklyReportEditClick(e) {
+    const target = e.target;
+    if (!target.classList.contains('edit-weekly-report-btn')) return;
 
     const reportId = target.dataset.id;
     if (!reportId) return;

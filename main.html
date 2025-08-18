@@ -8,6 +8,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Flatpickr CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -31,6 +35,7 @@
             <nav class="mb-4 border-b border-gray-200">
                 <div class="flex space-x-4 overflow-x-auto pb-2" aria-label="Tabs">
                     <button id="tab-dashboard" class="tab-button hidden whitespace-nowrap py-2 px-4 text-sm font-medium text-gray-500 hover:text-blue-600 border-b-2 border-transparent">แดชบอร์ด</button>
+                    <button id="tab-active-statuses" class="tab-button hidden whitespace-nowrap py-2 px-4 text-sm font-medium text-gray-500 hover:text-blue-600 border-b-2 border-transparent">สถานะกำลังพล</button>
                     <button id="tab-submit-status" class="tab-button whitespace-nowrap py-2 px-4 text-sm font-medium text-gray-500 hover:text-blue-600 border-b-2 border-transparent">ส่งยอดกำลังพล</button>
                     <button id="tab-history" class="tab-button whitespace-nowrap py-2 px-4 text-sm font-medium text-gray-500 hover:text-blue-600 border-b-2 border-transparent">ประวัติการส่ง</button>
                     <button id="tab-report" class="tab-button hidden whitespace-nowrap py-2 px-4 text-sm font-medium text-gray-500 hover:text-blue-600 border-b-2 border-transparent">ส่งรายงานประจำสัปดาห์</button>
@@ -41,6 +46,7 @@
             </nav>
             
             <main>
+                <!-- Dashboard Pane -->
                 <section id="pane-dashboard" class="tab-pane hidden">
                     <div class="flex items-baseline gap-x-3 mb-4">
                         <h2 class="text-xl font-semibold">สรุปภาพรวมประจำสัปดาห์</h2>
@@ -66,6 +72,18 @@
                     </div>
                 </section>
 
+                <!-- Active Statuses Pane -->
+                <section id="pane-active-statuses" class="tab-pane hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 id="active-statuses-title" class="text-xl font-semibold">สถานะกำลังพลที่ติดภารกิจ (ปัจจุบัน)</h2>
+                    </div>
+                    <div id="status-chart-container" class="mb-8 p-4 bg-gray-50 rounded-lg flex justify-center items-center h-64">
+                        <canvas id="status-chart-canvas"></canvas>
+                    </div>
+                    <div id="active-statuses-container" class="overflow-x-auto"></div>
+                </section>
+
+                <!-- Submit Status Pane -->
                 <section id="pane-submit-status" class="tab-pane hidden">
                      <div id="admin-dept-selector-container" class="mb-4"></div>
                      <div id="submission-info-area" class="hidden text-center p-4 mb-4 bg-green-100 text-green-800 rounded-lg"></div>
@@ -83,6 +101,7 @@
                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">รายละเอียด</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">วันเริ่มต้น</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">วันสิ้นสุด</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">เพิ่ม</th>
                                 </tr>
                             </thead>
                             <tbody id="status-submission-list-area" class="bg-white divide-y divide-gray-200"></tbody>
@@ -113,13 +132,26 @@
                     </div>
                 </section>
 
+                <!-- History Pane -->
                 <section id="pane-history" class="tab-pane hidden">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-xl font-semibold">ประวัติการส่งรายงานย้อนหลัง</h2>
                     </div>
+                    <div class="flex items-center space-x-4 mb-6 p-4 bg-gray-50 rounded-lg">
+                        <div>
+                            <label for="history-year-select" class="block text-sm font-medium text-gray-700">เลือกปี (พ.ศ.)</label>
+                            <select id="history-year-select" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                        </div>
+                        <div>
+                            <label for="history-month-select" class="block text-sm font-medium text-gray-700">เลือกเดือน</label>
+                            <select id="history-month-select" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                        </div>
+                        <button id="show-history-btn" class="self-end bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">แสดงรายงาน</button>
+                    </div>
                     <div id="history-container" class="space-y-6"></div>
                 </section>
 
+                <!-- Weekly Report Pane -->
                 <section id="pane-report" class="tab-pane hidden space-y-8">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-xl font-semibold">ส่งรายงานประจำสัปดาห์ <span id="report-week-range" class="text-lg text-gray-500 font-normal"></span></h2>
@@ -128,6 +160,7 @@
                     <div id="report-container"></div>
                 </section>
 
+                <!-- Archive Pane -->
                 <section id="pane-archive" class="tab-pane hidden space-y-8">
                     <div class="flex justify-between items-center mb-6"><h2 class="text-xl font-semibold">ประวัติการเก็บรายงานทั้งหมด</h2></div>
                     <div class="flex items-center space-x-4 mb-6 p-4 bg-gray-50 rounded-lg">
@@ -144,6 +177,7 @@
                     <div id="archive-container"></div>
                 </section>
 
+                <!-- Personnel Management Pane -->
                 <section id="pane-personnel" class="tab-pane hidden">
                     <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
                         <h2 class="text-xl font-semibold">รายชื่อกำลังพล</h2>
@@ -161,6 +195,7 @@
                     <div id="personnel-pagination" class="mt-4 flex justify-between items-center"></div>
                 </section>
 
+                <!-- User Management Pane -->
                 <section id="pane-admin" class="tab-pane hidden">
                      <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
                         <h2 class="text-xl font-semibold">รายชื่อผู้ใช้งานระบบ</h2>
@@ -192,6 +227,9 @@
         </div>
     </div>
     
+    <!-- Scripts loaded at the end for better performance and correct order -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="app.js" type="module" defer></script>
 </body>
 </html>
