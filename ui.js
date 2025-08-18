@@ -23,6 +23,59 @@ const thai_locale = {
     era: "พ.ศ.",
 };
 
+// --- Color settings for statuses ---
+const STATUS_COLORS = {
+    'ราชการ': 'bg-blue-50',
+    'คุมงาน': 'bg-indigo-50',
+    'ศึกษา': 'bg-purple-50',
+    'ลากิจ': 'bg-red-50',
+    'ลาพักผ่อน': 'bg-green-50',
+};
+
+// --- Function to create an empty state message ---
+function createEmptyState(message) {
+    return `
+        <div class="text-center py-10 px-4">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2z" />
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">ไม่พบข้อมูล</h3>
+            <p class="mt-1 text-sm text-gray-500">${escapeHTML(message)}</p>
+        </div>
+    `;
+}
+
+// --- Function to manage the confirmation modal ---
+export function showConfirmModal(title, message, onConfirm) {
+    const modal = document.getElementById('confirm-modal');
+    const titleEl = document.getElementById('confirm-modal-title');
+    const messageEl = document.getElementById('confirm-modal-message');
+    const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
+    const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
+
+    if (!modal || !titleEl || !messageEl || !confirmBtn || !cancelBtn) return;
+
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+    const confirmHandler = () => {
+        onConfirm();
+        modal.classList.remove('active');
+    };
+
+    const cancelHandler = () => {
+        modal.classList.remove('active');
+    };
+
+    newConfirmBtn.addEventListener('click', confirmHandler, { once: true });
+    cancelBtn.addEventListener('click', cancelHandler, { once: true });
+
+    modal.classList.add('active');
+}
+
 
 // --- Helper function to render pagination controls ---
 function renderPagination(containerId, totalItems, currentPage, onPageChange) {
@@ -143,7 +196,10 @@ export function renderPersonnel(res) {
     window.personnelListArea.innerHTML = '';
     
     if (!personnel || personnel.length === 0) {
-        window.personnelListArea.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-500">ไม่พบข้อมูลกำลังพล</td></tr>';
+        const tableContainer = window.personnelListArea.closest('.overflow-x-auto');
+        if (tableContainer) {
+            tableContainer.innerHTML = createEmptyState('ไม่พบข้อมูลกำลังพลในระบบ');
+        }
         document.getElementById('personnel-pagination').innerHTML = '';
         return;
     }
@@ -177,7 +233,10 @@ export function renderUsers(res) {
     window.userListArea.innerHTML = '';
     
     if (!users || users.length === 0) {
-        window.userListArea.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">ไม่พบข้อมูลผู้ใช้</td></tr>';
+        const tableContainer = window.userListArea.closest('.overflow-x-auto');
+        if (tableContainer) {
+            tableContainer.innerHTML = createEmptyState('ไม่พบข้อมูลผู้ใช้งานในระบบ');
+        }
         document.getElementById('user-pagination').innerHTML = '';
         return;
     }
@@ -483,7 +542,7 @@ export function renderWeeklyReport(res) {
     window.reportContainer.innerHTML = '';
     window.currentWeeklyReports = reports;
     if (!reports || reports.length === 0) {
-        window.reportContainer.innerHTML = '<p class="text-center text-gray-500">ยังไม่มีรายงานในระบบ</p>';
+        window.reportContainer.innerHTML = createEmptyState('ยังไม่มีแผนกใดส่งรายงานประจำสัปดาห์');
         return;
     }
     const reportsByDept = reports.reduce((acc, report) => {
@@ -544,7 +603,7 @@ export function renderSubmissionHistory(res) {
     const history = res.history;
     window.allHistoryData = history || {};
     populateHistorySelectors(window.allHistoryData);
-    if(window.historyContainer) window.historyContainer.innerHTML = '';
+    if(window.historyContainer) window.historyContainer.innerHTML = createEmptyState('กรุณาเลือกปีและเดือนเพื่อแสดงประวัติ');
 }
 
 export function populateHistorySelectors(history) {
@@ -572,7 +631,7 @@ export function renderFilteredHistoryReports(reports) {
     historyContainer.innerHTML = '';
 
     if (!reports || reports.length === 0) {
-        historyContainer.innerHTML = '<p class="text-center text-gray-500">ไม่พบประวัติการส่งรายงานสำหรับเดือนที่เลือก</p>';
+        historyContainer.innerHTML = createEmptyState('ไม่พบประวัติการส่งรายงานสำหรับเดือนที่เลือก');
         return;
     }
 
@@ -631,7 +690,7 @@ export function renderArchivedReports(reports) {
     if(!window.archiveContainer) return;
     window.archiveContainer.innerHTML = '';
     if (!reports || reports.length === 0) {
-        window.archiveContainer.innerHTML = '<p class="text-center text-gray-500">ไม่พบรายงานในเดือนที่เลือก</p>';
+        window.archiveContainer.innerHTML = createEmptyState('ไม่พบรายงานที่เก็บถาวรสำหรับเดือนที่เลือก');
         return;
     }
     const reportsByDate = reports.reduce((acc, report) => {
@@ -737,6 +796,37 @@ export function renderActiveStatuses(res) {
     if (window.myStatusChart) {
         window.myStatusChart.destroy();
     }
+    
+    const centerTextPlugin = {
+        id: 'centerText',
+        afterDraw: (chart) => {
+            const { ctx } = chart;
+            const chartArea = chart.chartArea;
+            const x = (chartArea.left + chartArea.right) / 2;
+            const y = (chartArea.top + chartArea.bottom) / 2;
+            
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            ctx.font = "bold 1.2rem 'Kanit', sans-serif";
+            ctx.fillStyle = '#4B5563';
+            ctx.fillText('กำลังพลทั้งหมด', x, y - 30);
+            
+            ctx.font = "bold 2.5rem 'Kanit', sans-serif";
+            ctx.fillStyle = '#1F2937';
+            ctx.fillText(total_personnel, x, y + 5);
+
+            ctx.font = "1rem 'Kanit', sans-serif";
+            ctx.fillStyle = '#6B7280';
+            ctx.fillText(`ว่าง ${available_count} | ติดภารกิจ ${unavailable_count}`, x, y + 40);
+
+            ctx.restore();
+        }
+    };
+
+    Chart.register(ChartDataLabels, centerTextPlugin);
+
     window.myStatusChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
@@ -752,6 +842,7 @@ export function renderActiveStatuses(res) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            cutout: '70%',
             plugins: {
                 legend: {
                     position: 'right',
@@ -759,16 +850,25 @@ export function renderActiveStatuses(res) {
                         font: {
                             family: "'Kanit', sans-serif",
                             size: 14
-                        }
+                        },
+                        boxWidth: 20
                     }
                 },
                 title: {
-                    display: true,
-                    text: `สรุปสถานะกำลังพลทั้งหมด: ${total_personnel} นาย`,
+                    display: false
+                },
+                datalabels: {
+                    formatter: (value) => {
+                        return value > 0 ? value : '';
+                    },
+                    color: '#fff',
                     font: {
                         family: "'Kanit', sans-serif",
-                        size: 16
-                    }
+                        weight: 'bold',
+                        size: 14,
+                    },
+                    textStrokeColor: 'black',
+                    textStrokeWidth: 2
                 }
             }
         }
@@ -777,7 +877,7 @@ export function renderActiveStatuses(res) {
 
     // --- Table Logic ---
     if (!statuses || statuses.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-500 mt-4">ไม่พบกำลังพลที่ติดภารกิจในขณะนี้</p>';
+        container.innerHTML = createEmptyState('ไม่พบกำลังพลที่ติดภารกิจในขณะนี้');
         return;
     }
 
@@ -800,8 +900,9 @@ export function renderActiveStatuses(res) {
 
     statuses.forEach((s, index) => {
         const fullName = `${escapeHTML(s.rank)} ${escapeHTML(s.first_name)} ${escapeHTML(s.last_name)}`;
+        const bgColorClass = STATUS_COLORS[s.status] || '';
         tableHTML += `
-            <tr>
+            <tr class="${bgColorClass}">
                 <td class="px-4 py-2">${index + 1}</td>
                 <td class="px-4 py-2">${fullName}</td>
                 ${is_admin ? `<td class="px-4 py-2">${escapeHTML(s.department)}</td>` : ''}

@@ -25,6 +25,15 @@ MAX_ATTEMPTS = 5
 SESSION_TIMEOUT_SECONDS = 1800 # 30 minutes
 ITEMS_PER_PAGE = 15 # Pagination limit
 
+RANK_ORDER = [
+    'น.อ.(พ)', 'น.อ.(พ).หญิง', 'น.อ.หม่อมหลวง', 'น.อ.', 'น.อ.หญิง', 
+    'น.ท.', 'น.ท.หญิง', 'น.ต.', 'น.ต.หญิง', 
+    'ร.อ.', 'ร.อ.หญิง', 'ร.ท.', 'ร.ท.หญิง', 'ร.ต.', 'ร.ต.หญิง',
+    'พ.อ.อ.(พ)', 'พ.อ.อ.', 'พ.อ.อ.หญิง', 'พ.อ.ท.', 'พ.อ.ท.หญิง', 
+    'พ.อ.ต.', 'พ.อ.ต.หญิง', 'จ.อ.', 'จ.อ.หญิง', 'จ.ท.', 'จ.ท.หญิง', 
+    'จ.ต.', 'จ.ต.หญิง', 'นาย', 'นาง', 'นางสาว'
+]
+
 # --- Helper Functions ---
 def get_thai_public_holidays(year):
     holidays = {
@@ -477,12 +486,30 @@ def handle_get_active_statuses(payload, conn, cursor, session):
         query += " AND ps.department = ?"
         params.append(department)
     
-    query += " ORDER BY ps.end_date ASC"
-    
     cursor.execute(query, params)
     
     statuses = [dict(row) for row in cursor.fetchall()]
-    return {"status": "success", "active_statuses": statuses}
+
+    def get_rank_index(item):
+        try:
+            return RANK_ORDER.index(item['rank'])
+        except ValueError:
+            return len(RANK_ORDER)
+
+    statuses.sort(key=get_rank_index)
+    
+    if is_admin:
+        cursor.execute("SELECT COUNT(id) as total FROM personnel")
+    else:
+        cursor.execute("SELECT COUNT(id) as total FROM personnel WHERE department = ?", (department,))
+    
+    total_personnel_in_scope = cursor.fetchone()['total']
+
+    return {
+        "status": "success", 
+        "active_statuses": statuses,
+        "total_personnel": total_personnel_in_scope
+    }
 
 
 # --- HTTP Request Handler ---

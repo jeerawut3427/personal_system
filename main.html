@@ -77,7 +77,7 @@
                     <div class="flex justify-between items-center mb-6">
                         <h2 id="active-statuses-title" class="text-xl font-semibold">สถานะกำลังพลที่ติดภารกิจ (ปัจจุบัน)</h2>
                     </div>
-                    <div id="status-chart-container" class="mb-8 p-4 bg-gray-50 rounded-lg flex justify-center items-center h-64">
+                    <div id="status-chart-container" class="mb-8 p-4 bg-gray-50 rounded-lg flex justify-center items-center h-64 md:h-80">
                         <canvas id="status-chart-canvas"></canvas>
                     </div>
                     <div id="active-statuses-container" class="overflow-x-auto"></div>
@@ -227,9 +227,21 @@
         </div>
     </div>
     
+    <div id="confirm-modal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 z-30 items-center justify-center">
+        <div class="relative bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
+            <h3 id="confirm-modal-title" class="text-xl font-semibold mb-4 text-gray-800">ยืนยันการกระทำ</h3>
+            <p id="confirm-modal-message" class="text-gray-600 mb-6">คุณแน่ใจหรือไม่?</p>
+            <div class="flex justify-end space-x-2">
+                <button id="confirm-modal-cancel-btn" type="button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300">ยกเลิก</button>
+                <button id="confirm-modal-confirm-btn" type="button" class="px-4 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700">ยืนยัน</button>
+            </div>
+        </div>
+    </div>
+    
     <!-- Scripts loaded at the end for better performance and correct order -->
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <script src="app.js" type="module" defer></script>
 </body>
 </html>
