@@ -472,42 +472,53 @@ def handle_get_active_statuses(payload, conn, cursor, session):
     is_admin = session.get("role") == "admin"
     department = session.get("department")
 
-    query = """
+    # Get unavailable personnel (active statuses)
+    query_unavailable = """
         SELECT 
-            ps.status, ps.details, ps.start_date, ps.end_date,
+            ps.status, ps.details, ps.start_date, ps.end_date, ps.personnel_id,
             p.rank, p.first_name, p.last_name, p.department
         FROM persistent_statuses ps
         JOIN personnel p ON ps.personnel_id = p.id
         WHERE ps.end_date >= ?
     """
-    params = [today_str]
-
+    params_unavailable = [today_str]
     if not is_admin:
-        query += " AND ps.department = ?"
-        params.append(department)
+        query_unavailable += " AND ps.department = ?"
+        params_unavailable.append(department)
     
-    cursor.execute(query, params)
-    
-    statuses = [dict(row) for row in cursor.fetchall()]
+    cursor.execute(query_unavailable, params_unavailable)
+    unavailable_personnel = [dict(row) for row in cursor.fetchall()]
+    unavailable_ids = {p['personnel_id'] for p in unavailable_personnel}
 
+    # Get all personnel in scope
+    query_all = "SELECT id, rank, first_name, last_name, department FROM personnel"
+    params_all = []
+    if not is_admin:
+        query_all += " WHERE department = ?"
+        params_all.append(department)
+
+    cursor.execute(query_all, params_all)
+    all_personnel = [dict(row) for row in cursor.fetchall()]
+
+    # Filter to find available personnel
+    available_personnel = [p for p in all_personnel if p['id'] not in unavailable_ids]
+
+    # Sort both lists by rank
     def get_rank_index(item):
         try:
             return RANK_ORDER.index(item['rank'])
         except ValueError:
             return len(RANK_ORDER)
 
-    statuses.sort(key=get_rank_index)
+    unavailable_personnel.sort(key=get_rank_index)
+    available_personnel.sort(key=get_rank_index)
     
-    if is_admin:
-        cursor.execute("SELECT COUNT(id) as total FROM personnel")
-    else:
-        cursor.execute("SELECT COUNT(id) as total FROM personnel WHERE department = ?", (department,))
-    
-    total_personnel_in_scope = cursor.fetchone()['total']
+    total_personnel_in_scope = len(all_personnel)
 
     return {
         "status": "success", 
-        "active_statuses": statuses,
+        "active_statuses": unavailable_personnel,
+        "available_personnel": available_personnel,
         "total_personnel": total_personnel_in_scope
     }
 

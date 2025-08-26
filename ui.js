@@ -32,6 +32,17 @@ const STATUS_COLORS = {
     'ลาพักผ่อน': 'bg-green-50',
 };
 
+// --- Color settings for the chart ---
+const CHART_STATUS_COLORS = {
+    'ว่าง': '#4CAF50',
+    'ราชการ': '#3B82F6',
+    'คุมงาน': '#6366F1',
+    'ศึกษา': '#8B5CF6',
+    'ลากิจ': '#EF4444',
+    'ลาพักผ่อน': '#10B981',
+};
+
+
 // --- Function to create an empty state message ---
 function createEmptyState(message) {
     return `
@@ -753,44 +764,68 @@ export function openUserModal(user = null) {
     window.userModal.classList.add('active');
 }
 
-export function renderActiveStatuses(res) {
-    const statuses = res.active_statuses;
-    const total_personnel = res.total_personnel;
-    const container = window.activeStatusesContainer;
+// A global variable to hold the full dataset for filtering
+let fullStatusDataCache = null;
+
+// Function to update the view based on the selected filter
+function updateActiveStatusesView(filter) {
+    if (!fullStatusDataCache) return;
+
+    // Update button styles
+    document.querySelectorAll('.status-filter-btn').forEach(btn => {
+        if (btn.dataset.filter === filter) {
+            btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+            btn.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
+        } else {
+            btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600');
+            btn.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
+        }
+    });
+
+    const { active_statuses, available_personnel, total_personnel } = fullStatusDataCache;
+    const unavailableContainer = document.getElementById('active-statuses-container');
+    const availableContainer = document.getElementById('available-personnel-container');
     const chartContainer = document.getElementById('status-chart-container');
-    const titleEl = document.getElementById('active-statuses-title');
+    const unavailableTitle = document.getElementById('unavailable-title');
+    const availableTitle = document.getElementById('available-title');
 
-    if (!container || !chartContainer || !titleEl) return;
+    // Filter data
+    let filteredUnavailable = active_statuses;
+    let filteredAvailable = available_personnel;
+    let showUnavailable = true;
+    let showAvailable = true;
 
-    container.innerHTML = '';
-    chartContainer.innerHTML = '<canvas id="status-chart-canvas"></canvas>';
-
-    if (window.currentUser.role !== 'admin') {
-        titleEl.textContent = `สถานะกำลังพล แผนก ${escapeHTML(window.currentUser.department)}`;
-    } else {
-        titleEl.textContent = `สถานะกำลังพลที่ติดภารกิจ (ภาพรวม)`;
+    if (filter === 'ว่าง') {
+        filteredUnavailable = [];
+        showUnavailable = false;
+    } else if (filter !== 'ทั้งหมด') {
+        filteredUnavailable = active_statuses.filter(s => s.status === filter);
+        filteredAvailable = [];
+        showAvailable = false;
     }
 
-    // --- Chart Logic ---
-    const unavailable_count = statuses.length;
-    const available_count = total_personnel - unavailable_count;
-
-    const status_counts = statuses.reduce((acc, s) => {
+    // --- Chart Logic (Update based on filter) ---
+    chartContainer.innerHTML = '<canvas id="status-chart-canvas"></canvas>';
+    const unavailable_count = filteredUnavailable.length;
+    const available_count = showAvailable ? filteredAvailable.length : 0;
+    
+    const status_counts = filteredUnavailable.reduce((acc, s) => {
         acc[s.status] = (acc[s.status] || 0) + 1;
         return acc;
     }, {});
 
-    const chartLabels = ['ว่าง', ...Object.keys(status_counts)];
-    const chartData = [available_count, ...Object.values(status_counts)];
-    const chartColors = [
-        '#4CAF50', // Green for Available
-        '#3B82F6', // Blue
-        '#F59E0B', // Amber
-        '#8B5CF6', // Violet
-        '#EF4444', // Red
-        '#10B981', // Emerald
-        '#6366F1', // Indigo
-    ];
+    let chartLabels = [];
+    let chartData = [];
+    
+    if (showAvailable && available_count > 0) {
+        chartLabels.push('ว่าง');
+        chartData.push(available_count);
+    }
+    chartLabels.push(...Object.keys(status_counts));
+    chartData.push(...Object.values(status_counts));
+    
+    // Dynamically create the color array based on the labels
+    const dynamicChartColors = chartLabels.map(label => CHART_STATUS_COLORS[label] || '#CCCCCC'); // Use gray for any unknown status
 
     const ctx = document.getElementById('status-chart-canvas').getContext('2d');
     if (window.myStatusChart) {
@@ -819,7 +854,7 @@ export function renderActiveStatuses(res) {
 
             ctx.font = "1rem 'Kanit', sans-serif";
             ctx.fillStyle = '#6B7280';
-            ctx.fillText(`ว่าง ${available_count} | ติดภารกิจ ${unavailable_count}`, x, y + 40);
+            ctx.fillText(`ว่าง ${available_personnel.length} | ติดภารกิจ ${active_statuses.length}`, x, y + 40);
 
             ctx.restore();
         }
@@ -834,7 +869,7 @@ export function renderActiveStatuses(res) {
             datasets: [{
                 label: 'จำนวนกำลังพล',
                 data: chartData,
-                backgroundColor: chartColors,
+                backgroundColor: dynamicChartColors,
                 borderColor: '#FFFFFF',
                 borderWidth: 2
             }]
@@ -846,27 +881,13 @@ export function renderActiveStatuses(res) {
             plugins: {
                 legend: {
                     position: 'right',
-                    labels: {
-                        font: {
-                            family: "'Kanit', sans-serif",
-                            size: 14
-                        },
-                        boxWidth: 20
-                    }
+                    labels: { font: { family: "'Kanit', sans-serif", size: 14 }, boxWidth: 20 }
                 },
-                title: {
-                    display: false
-                },
+                title: { display: false },
                 datalabels: {
-                    formatter: (value) => {
-                        return value > 0 ? value : '';
-                    },
+                    formatter: (value) => value > 0 ? value : '',
                     color: '#fff',
-                    font: {
-                        family: "'Kanit', sans-serif",
-                        weight: 'bold',
-                        size: 14,
-                    },
+                    font: { family: "'Kanit', sans-serif", weight: 'bold', size: 14 },
                     textStrokeColor: 'black',
                     textStrokeWidth: 2
                 }
@@ -874,49 +895,97 @@ export function renderActiveStatuses(res) {
         }
     });
 
+    // --- Table Logic (Update based on filter) ---
+    unavailableTitle.style.display = showUnavailable ? 'block' : 'none';
+    unavailableContainer.style.display = showUnavailable ? 'block' : 'none';
+    availableTitle.style.display = showAvailable ? 'block' : 'none';
+    availableContainer.style.display = showAvailable ? 'block' : 'none';
 
-    // --- Table Logic ---
-    if (!statuses || statuses.length === 0) {
-        container.innerHTML = createEmptyState('ไม่พบกำลังพลที่ติดภารกิจในขณะนี้');
-        return;
+    if (showUnavailable) {
+        if (!filteredUnavailable || filteredUnavailable.length === 0) {
+            unavailableContainer.innerHTML = createEmptyState('ไม่พบกำลังพลที่ติดภารกิจตามเงื่อนไขที่เลือก');
+        } else {
+            const is_admin = (window.currentUser.role === 'admin');
+            let tableHTML = `<table class="min-w-full bg-white"><thead class="bg-gray-50"><tr>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ลำดับ</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ยศ-ชื่อ-สกุล</th>
+                ${is_admin ? '<th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">แผนก</th>' : ''}
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">สถานะ</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">รายละเอียด/สถานที่</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ช่วงวันที่</th>
+            </tr></thead><tbody class="bg-white divide-y divide-gray-200">`;
+            filteredUnavailable.forEach((s, index) => {
+                const fullName = `${escapeHTML(s.rank)} ${escapeHTML(s.first_name)} ${escapeHTML(s.last_name)}`;
+                const bgColorClass = STATUS_COLORS[s.status] || '';
+                tableHTML += `<tr class="${bgColorClass}">
+                    <td class="px-4 py-2">${index + 1}</td>
+                    <td class="px-4 py-2">${fullName}</td>
+                    ${is_admin ? `<td class="px-4 py-2">${escapeHTML(s.department)}</td>` : ''}
+                    <td class="px-4 py-2">${escapeHTML(s.status)}</td>
+                    <td class="px-4 py-2">${escapeHTML(s.details)}</td>
+                    <td class="px-4 py-2">${formatThaiDateRangeArabic(s.start_date, s.end_date)}</td>
+                </tr>`;
+            });
+            tableHTML += `</tbody></table>`;
+            unavailableContainer.innerHTML = tableHTML;
+        }
     }
 
-    const is_admin = (window.currentUser.role === 'admin');
-    
-    let tableHTML = `
-        <table class="min-w-full bg-white">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ลำดับ</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ยศ-ชื่อ-สกุล</th>
-                    ${is_admin ? '<th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">แผนก</th>' : ''}
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">สถานะ</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">รายละเอียด/สถานที่</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ช่วงวันที่</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-    `;
+    if (showAvailable) {
+        if (!filteredAvailable || filteredAvailable.length === 0) {
+            availableContainer.innerHTML = createEmptyState('ไม่พบกำลังพลที่ว่าง');
+        } else {
+            const is_admin = (window.currentUser.role === 'admin');
+            let tableHTML = `<table class="min-w-full bg-white"><thead class="bg-gray-50"><tr>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ลำดับ</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ยศ-ชื่อ-สกุล</th>
+                ${is_admin ? '<th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">แผนก</th>' : ''}
+            </tr></thead><tbody class="bg-white divide-y divide-gray-200">`;
+            filteredAvailable.forEach((p, index) => {
+                const fullName = `${escapeHTML(p.rank)} ${escapeHTML(p.first_name)} ${escapeHTML(p.last_name)}`;
+                tableHTML += `<tr class="bg-green-50/50">
+                    <td class="px-4 py-2">${index + 1}</td>
+                    <td class="px-4 py-2">${fullName}</td>
+                    ${is_admin ? `<td class="px-4 py-2">${escapeHTML(p.department)}</td>` : ''}
+                </tr>`;
+            });
+            tableHTML += `</tbody></table>`;
+            availableContainer.innerHTML = tableHTML;
+        }
+    }
+}
 
-    statuses.forEach((s, index) => {
-        const fullName = `${escapeHTML(s.rank)} ${escapeHTML(s.first_name)} ${escapeHTML(s.last_name)}`;
-        const bgColorClass = STATUS_COLORS[s.status] || '';
-        tableHTML += `
-            <tr class="${bgColorClass}">
-                <td class="px-4 py-2">${index + 1}</td>
-                <td class="px-4 py-2">${fullName}</td>
-                ${is_admin ? `<td class="px-4 py-2">${escapeHTML(s.department)}</td>` : ''}
-                <td class="px-4 py-2">${escapeHTML(s.status)}</td>
-                <td class="px-4 py-2">${escapeHTML(s.details)}</td>
-                <td class="px-4 py-2">${formatThaiDateRangeArabic(s.start_date, s.end_date)}</td>
-            </tr>
-        `;
+// Main function to set up the status view
+export function renderActiveStatuses(res) {
+    fullStatusDataCache = res; // Cache the data
+    const titleEl = document.getElementById('active-statuses-title');
+    const filterContainer = document.getElementById('status-filter-container');
+
+    if (!titleEl || !filterContainer) return;
+
+    if (window.currentUser.role !== 'admin') {
+        titleEl.textContent = `สถานะกำลังพล แผนก ${escapeHTML(window.currentUser.department)}`;
+    } else {
+        titleEl.textContent = `สถานะกำลังพล (ภาพรวม)`;
+    }
+
+    // Render filter buttons
+    filterContainer.innerHTML = '';
+    const filters = ['ทั้งหมด', 'ว่าง', ...Object.keys(STATUS_COLORS)];
+    
+    filters.forEach(filter => {
+        const button = document.createElement('button');
+        button.textContent = filter;
+        button.dataset.filter = filter;
+        button.className = 'status-filter-btn px-3 py-1 text-sm font-medium rounded-full border transition-colors bg-white text-gray-700 border-gray-300';
+        
+        button.addEventListener('click', () => {
+            updateActiveStatusesView(filter);
+        });
+
+        filterContainer.appendChild(button);
     });
 
-    tableHTML += `
-            </tbody>
-        </table>
-    `;
-
-    container.innerHTML = tableHTML;
+    // Render the initial view with 'ทั้งหมด' filter
+    updateActiveStatusesView('ทั้งหมด');
 }

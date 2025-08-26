@@ -74,13 +74,23 @@
 
                 <!-- Active Statuses Pane -->
                 <section id="pane-active-statuses" class="tab-pane hidden">
-                    <div class="flex justify-between items-center mb-6">
-                        <h2 id="active-statuses-title" class="text-xl font-semibold">สถานะกำลังพลที่ติดภารกิจ (ปัจจุบัน)</h2>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 id="active-statuses-title" class="text-xl font-semibold">สถานะกำลังพล (ปัจจุบัน)</h2>
+                    </div>
+                    <div id="status-filter-container" class="flex flex-wrap gap-2 mb-6 border-b pb-4">
+                        <!-- Filter buttons will be dynamically inserted here -->
                     </div>
                     <div id="status-chart-container" class="mb-8 p-4 bg-gray-50 rounded-lg flex justify-center items-center h-64 md:h-80">
                         <canvas id="status-chart-canvas"></canvas>
                     </div>
-                    <div id="active-statuses-container" class="overflow-x-auto"></div>
+                    
+                    <!-- Unavailable Personnel Section -->
+                    <h3 id="unavailable-title" class="text-lg font-semibold text-red-600 mb-3">กำลังพลติดภารกิจ</h3>
+                    <div id="active-statuses-container" class="overflow-x-auto mb-8"></div>
+
+                    <!-- Available Personnel Section -->
+                    <h3 id="available-title" class="text-lg font-semibold text-green-600 mb-3">กำลังพลว่าง</h3>
+                    <div id="available-personnel-container" class="overflow-x-auto"></div>
                 </section>
 
                 <!-- Submit Status Pane -->
