@@ -155,6 +155,12 @@ function initializePage() {
     appContainer.classList.remove('hidden');
     const userRole = currentUser.role;
     welcomeMessage.textContent = `ล็อกอินในฐานะ: ${escapeHTML(currentUser.username)} (${escapeHTML(userRole)})`;
+const backToSelectionBtn = document.getElementById('back-to-selection-btn');
+    if (backToSelectionBtn) {
+        backToSelectionBtn.addEventListener('click', () => {
+            window.location.href = '/selection.html';
+        });
+    }
 
     const is_admin = (userRole === 'admin');
     document.getElementById('tab-dashboard').classList.toggle('hidden', !is_admin);

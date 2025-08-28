@@ -49,7 +49,7 @@ loginForm.addEventListener('submit', async (e) => {
 
         if (response.ok && result.status === 'success' && result.user) {
             localStorage.setItem('currentUser', JSON.stringify(result.user));
-            window.location.href = '/main.html';
+            window.location.href = '/selection.html'; // เปลี่ยนเส้นทางไปที่หน้าเลือก
         } else {
             showMessage(result.message || 'เกิดข้อผิดพลาดในการล็อกอิน', false);
             submitButton.disabled = false;
